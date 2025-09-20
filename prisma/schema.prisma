@@ -1,0 +1,65 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum SubscriptionType {
+  FREE
+  M1
+  M3
+  M6
+  M12
+}
+
+model User {
+  id          Int           @id @default(autoincrement())
+  telegramId  String
+  chatId      String
+  accountName String?
+  balance     Int           @default(0) // рубли, целое число
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  subscriptions Subscription[]
+  topUps         TopUp[]
+
+  @@unique([telegramId, chatId], name: "telegramId_chatId")
+  @@index([telegramId])
+  @@index([chatId])
+}
+
+model Subscription {
+  id              Int              @id @default(autoincrement())
+  type            SubscriptionType
+  startDate       DateTime         @default(now())
+  endDate         DateTime?
+  userId          Int
+  user            User             @relation(fields: [userId], references: [id])
+  subscriptionUrl String?          // 🔥 новая колонка
+
+  @@index([userId])
+  @@index([type, startDate])
+}
+
+
+model TopUp {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id])
+  amount     Int
+  status     String   @default("PENDING") // PENDING | SUCCESS | FAILED | TIMEOUT
+  orderId    String   @unique              // внешний/наш номер заказа
+  billId     String?                       // id счета в провайдере
+  credited   Boolean  @default(false)      // ✅ зачислено на баланс?
+  creditedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, createdAt])
+}
+
+
