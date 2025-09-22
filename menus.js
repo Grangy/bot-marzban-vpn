@@ -1,19 +1,43 @@
-const { Markup } = require("telegraf");
+const {
+  Markup
+} = require("telegraf");
 
 const PLANS = {
-  M1: { label: "1 месяц", price: 100, months: 1, type: "M1" },
-  M3: { label: "3 месяца", price: 270, months: 3, type: "M3" },
-  M6: { label: "6 месяцев", price: 520, months: 6, type: "M6" },
-  M12: { label: "12 месяцев", price: 1000, months: 12, type: "M12" },
+  M1: {
+    label: "1 месяц",
+    price: 100,
+    months: 1,
+    type: "M1"
+  },
+  M3: {
+    label: "3 месяца",
+    price: 270,
+    months: 3,
+    type: "M3"
+  },
+  M6: {
+    label: "6 месяцев",
+    price: 520,
+    months: 6,
+    type: "M6"
+  },
+  M12: {
+    label: "12 месяцев",
+    price: 1000,
+    months: 12,
+    type: "M12"
+  },
 };
 const TOPUP_AMOUNTS = [100, 270, 520, 1000];
 
 function ruMoney(v) {
   return `${v} ₽`;
 }
+
 function formatDate(d) {
   return d ? new Date(d).toLocaleDateString("ru-RU") : "∞";
 }
+
 function calcEndDate(months) {
   const now = new Date();
   const dt = new Date(now);
@@ -37,18 +61,26 @@ function getDisplayLabel(sub) {
     return `${months} мес.`;
   }
 
-  return PLANS[sub.type]?.label || sub.type;
+return PLANS[sub.type]?.label || sub.type;
+
 }
 
 
-
+function infoMenu(balanceRub = 0) {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback("📄 Пользовательское соглашение", "tos")],
+    [Markup.button.callback("🔒 Политика конфиденциальности", "privacy")],
+    [Markup.button.callback("⬅️ Назад", "back")],
+  ]);
+}
 
 function mainMenu(balanceRub = 0) {
   return Markup.inlineKeyboard([
-    [Markup.button.callback("📋 Информация", "info")],
+    [Markup.button.callback("📦 Мои подписки", "my_subs")],
     [Markup.button.callback("💳 Купить подписку", "buy")],
     [Markup.button.callback(`💼 Баланс: ${ruMoney(balanceRub)}`, "balance")],
-    [Markup.button.callback("📦 Мои подписки", "my_subs")],
+    [Markup.button.callback("📋 Информация", "info")],
+    [Markup.button.url("🛠 Тех.поддержка", "https://t.me/grangym")], // 🔥 ссылка на поддержку
   ]);
 }
 
@@ -83,4 +115,5 @@ module.exports = {
   buyMenu,
   topupMenu,
   getDisplayLabel, // 👈 добавляем сюда
+    infoMenu, // 👈 экспортируем
 };
