@@ -189,18 +189,27 @@ bot.action("privacy", async (ctx) => {
         });
       }
 
-  let successText = `✅ Подписка оформлена: ${plan.label}
-  Действует до: ${formatDate(result.sub.endDate)}
+let successText = `✅ Подписка оформлена: ${plan.label}
+Действует до: ${formatDate(result.sub.endDate)}
 
-  Текущий баланс: ${ruMoney(result.balance)}`;
+Текущий баланс: ${ruMoney(result.balance)}
 
-  // если в ответе от API пришла ссылка и мы её сохранили
-  const lastSub = await prisma.subscription.findUnique({ where: { id: result.sub.id } });
-  if (lastSub.subscriptionUrl) {
-    successText += `\n\n🔗 Ваша ссылка: ${lastSub.subscriptionUrl}`;
-  }
+ℹ️ Чтобы установить подписку на ваше устройство, перейдите в раздел «Инструкции».`;
 
-  await editOrAnswer(ctx, successText, mainMenu(result.balance));
+// если в ответе от API пришла ссылка и мы её сохранили
+const lastSub = await prisma.subscription.findUnique({ where: { id: result.sub.id } });
+if (lastSub.subscriptionUrl) {
+  successText += `\n\n🔗 Ваша ссылка: ${lastSub.subscriptionUrl}`;
+}
+
+// Добавляем кнопку "Инструкции" в меню
+const keyboard = Markup.inlineKeyboard([
+  [Markup.button.callback("📖 Инструкции", "instructions")],
+  [Markup.button.callback("⬅️ В меню", "back")]
+]);
+
+await editOrAnswer(ctx, successText, keyboard);
+
 
     } catch (e) {
       console.error("buy error:", e);
