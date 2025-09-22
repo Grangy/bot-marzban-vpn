@@ -52,5 +52,23 @@ const shutdown = async (signal) => {
   }
 };
 
+function startTopupCleaner() {
+  const EXPIRATION_MS = 3 * 60 * 1000;
+
+  setInterval(async () => {
+    const threshold = new Date(Date.now() - EXPIRATION_MS);
+    const expired = await prisma.topUp.updateMany({
+      where: { status: "PENDING", createdAt: { lt: threshold } },
+      data: { status: "TIMEOUT" }
+    });
+    if (expired.count > 0) {
+      console.log(`⏳ Closed ${expired.count} expired topups`);
+    }
+  }, 60 * 1000); // раз в минуту
+}
+
+startTopupCleaner();
+
+
 process.once("SIGINT", () => shutdown("SIGINT"));
 process.once("SIGTERM", () => shutdown("SIGTERM"));
