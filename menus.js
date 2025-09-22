@@ -85,14 +85,21 @@ function instructionsMenu() {
 
 function mainMenu(balanceRub = 0) {
   return Markup.inlineKeyboard([
-    [Markup.button.callback("📦 Мои подписки", "my_subs")],
-    [Markup.button.callback("💳 Купить подписку", "buy")],
-    [Markup.button.callback(`💼 Баланс: ${ruMoney(balanceRub)}`, "balance")],
-    [Markup.button.callback("📋 Информация", "info")],
-    [Markup.button.callback("📖 Инструкции", "instructions")], // 🔥 новый пункт
-    [Markup.button.url("🛠 Тех.поддержка", "https://t.me/grangym")],
+    [
+      Markup.button.callback("📦 Мои подписки", "my_subs"),
+      Markup.button.callback("💳 Купить подписку", "buy")
+    ],
+    [
+      Markup.button.callback(`💼 Баланс: ${ruMoney(balanceRub)}`, "balance"),
+      Markup.button.callback("📋 Информация", "info")
+    ],
+    [
+      Markup.button.callback("📖 Инструкции", "instructions"),
+      Markup.button.url("🛠 Тех.поддержка", "https://t.me/grangym")
+    ]
   ]);
 }
+
 
 function buyMenu() {
   return Markup.inlineKeyboard([
