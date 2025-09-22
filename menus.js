@@ -74,13 +74,23 @@ function infoMenu(balanceRub = 0) {
   ]);
 }
 
+function instructionsMenu() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback("📱 iOS / macOS", "guide_ios")],
+    [Markup.button.callback("🤖 Android", "guide_android")],
+    [Markup.button.callback("💻 Windows", "guide_windows")],
+    [Markup.button.callback("⬅️ Назад", "back")],
+  ]);
+}
+
 function mainMenu(balanceRub = 0) {
   return Markup.inlineKeyboard([
     [Markup.button.callback("📦 Мои подписки", "my_subs")],
     [Markup.button.callback("💳 Купить подписку", "buy")],
     [Markup.button.callback(`💼 Баланс: ${ruMoney(balanceRub)}`, "balance")],
     [Markup.button.callback("📋 Информация", "info")],
-    [Markup.button.url("🛠 Тех.поддержка", "https://t.me/grangym")], // 🔥 ссылка на поддержку
+    [Markup.button.callback("📖 Инструкции", "instructions")], // 🔥 новый пункт
+    [Markup.button.url("🛠 Тех.поддержка", "https://t.me/grangym")],
   ]);
 }
 
@@ -115,5 +125,6 @@ module.exports = {
   buyMenu,
   topupMenu,
   getDisplayLabel, // 👈 добавляем сюда
-    infoMenu, // 👈 экспортируем
+  infoMenu, // 👈 экспортируем
+  instructionsMenu,
 };
