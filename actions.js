@@ -236,9 +236,18 @@ await editOrAnswer(ctx, successText, keyboard);
     return next();
   });
 
-  bot.action(/^topup_(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery();
-    const amount = parseInt(ctx.match[1], 10);
+ bot.action(/^topup_(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const amount = parseInt(ctx.match[1], 10);
+
+  // Проверяем активные пополнения
+  const pendingCount = await prisma.topUp.count({
+    where: { userId: ctx.dbUser.id, status: "PENDING" }
+  });
+
+  if (pendingCount >= 3) {
+    return ctx.reply("❌ У вас уже есть 3 неоплаченных счета.\nЗакройте их или дождитесь истечения срока.");
+  }
     if (isNaN(amount) || amount <= 0) {
       console.warn(`[TOPUP] Invalid amount: "${ctx.match[1]}"`);
       return ctx.reply("Некорректная сумма пополнения.", topupMenu());
