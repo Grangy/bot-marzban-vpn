@@ -2,7 +2,7 @@ const bus = require("./events");
 const { prisma } = require("./db");
 
 function startTopupCleaner() {
-  const EXPIRATION_MS = 3 * 60 * 1000;
+  const EXPIRATION_MS = 30 * 60 * 1000;
 
   setInterval(async () => {
     const threshold = new Date(Date.now() - EXPIRATION_MS);

@@ -42,7 +42,7 @@ bus.on("topup.timeout", async ({ topupId }) => {
     if (!user?.chatId) return;
 
     const text =
-      `⏳ Счёт на ${ruMoney(topup.amount)} истёк (не оплачен в течение 3 минут).\n` +
+      `⏳ Счёт на ${ruMoney(topup.amount)} истёк (не оплачен в течение 30 минут).\n` +
       `Создайте новый запрос на пополнение.`;
 
     await bot.telegram.sendMessage(user.chatId, text);

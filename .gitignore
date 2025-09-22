@@ -4,3 +4,5 @@ node_modules
 
 /generated/prisma
 /prisma/dev.db
+build.js
+all.js
