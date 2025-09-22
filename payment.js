@@ -4,56 +4,68 @@ const fetch = require("node-fetch");
 const { v4: uuidv4 } = require("uuid");
 const bus = require("./events");
 
-const API_URL   = process.env.PAYMENT_API_URL   || "https://pal24.pro/api/v1";
-const API_TOKEN = process.env.PAYMENT_API_TOKEN || "FAKE";
-const SHOP_ID   = process.env.PAYMENT_SHOP_ID   || "FAKE";
+const API_URL        = process.env.PAYMENT_API_URL || "https://app.platega.io/transaction/process";
+const MERCHANT_ID    = process.env.PAYMENT_MERCHANT_ID || "FAKE";
+const SECRET_KEY     = process.env.PAYMENT_SECRET || "FAKE";
+const RETURN_URL     = process.env.PAYMENT_RETURN_URL || "https://example.com/success";
+const FAIL_URL       = process.env.PAYMENT_FAIL_URL || "https://example.com/fail";
 
+// Метод по умолчанию — QR / СБП
+const DEFAULT_METHOD = 2;
+
+/**
+ * Создание счёта (Platega).
+ */
 async function createInvoice(userId, amount, description = "Пополнение") {
-  const orderId = `order_${uuidv4()}`;
+  const orderId = uuidv4();
 
+  // сохраняем в БД
   const topup = await prisma.topUp.create({
     data: { userId, amount, status: "PENDING", orderId },
   });
 
-  if (API_TOKEN === "FAKE") {
+  // Если нет реальных ключей — возвращаем фейковую ссылку
+  if (MERCHANT_ID === "FAKE" || SECRET_KEY === "FAKE") {
     return {
       link: `https://fakepay.local/invoice/${orderId}`,
       topup,
     };
   }
 
-  const formData = new URLSearchParams();
-  formData.append("amount", amount);
-  formData.append("order_id", orderId);
-  formData.append("description", description);
-  formData.append("type", "normal");
-  formData.append("shop_id", SHOP_ID);
-  formData.append("currency_in", "RUB");
-  formData.append("custom", String(userId));
-  formData.append("payer_pays_commission", "1");
-  formData.append("name", "Пополнение");
+  const body = {
+    paymentMethod: DEFAULT_METHOD, // 2 = QR/СБП
+    id: orderId, // UUID транзакции
+    paymentDetails: {
+      amount,
+      currency: "RUB",
+    },
+    description,
+    return: RETURN_URL,
+    failedUrl: FAIL_URL,
+    payload: String(userId), // полезно для связи
+  };
 
-  const response = await fetch(`${API_URL}/bill/create`, {
+  const response = await fetch(API_URL, {
     method: "POST",
-    headers: { Authorization: `Bearer ${API_TOKEN}` },
-    body: formData,
+    headers: {
+      "Content-Type": "application/json",
+      "X-MerchantId": MERCHANT_ID,
+      "X-Secret": SECRET_KEY,
+    },
+    body: JSON.stringify(body),
   });
 
   const data = await response.json();
 
-  if (!response.ok || !data.link_page_url) {
-    throw new Error("Не удалось создать счёт: " + JSON.stringify(data));
+  if (!response.ok || !data.redirect) {
+    console.error("[Platega] error response:", data);
+    throw new Error("Не удалось создать счёт в Platega");
   }
 
-  await prisma.topUp.update({
-    where: { id: topup.id },
-    data: { billId: data.bill_id },
-  });
-
-  return { link: data.link_page_url, topup };
+  return { link: data.redirect, topup };
 }
 
-/** Идемпотентное зачисление. */
+/** Идемпотентное зачисление */
 async function applyCreditIfNeeded(topupId) {
   return prisma.$transaction(async (tx) => {
     const t = await tx.topUp.findUnique({ where: { id: topupId } });
@@ -78,7 +90,7 @@ async function applyCreditIfNeeded(topupId) {
   });
 }
 
-/** Пометить успех + зачислить + сгенерировать событие для уведомления. */
+/** Пометить успех + зачислить + сгенерировать событие */
 async function markTopupSuccessAndCredit(topupId) {
   const t = await prisma.topUp.findUnique({ where: { id: topupId } });
   if (!t) return { ok: false, reason: "NOT_FOUND" };
@@ -89,7 +101,6 @@ async function markTopupSuccessAndCredit(topupId) {
 
   const res = await applyCreditIfNeeded(t.id);
 
-  // Уведомляем только когда реально было зачисление (чтобы не дублировать)
   if (res.credited) {
     bus.emit("topup.success", { topupId: t.id });
   }
@@ -97,7 +108,7 @@ async function markTopupSuccessAndCredit(topupId) {
   return { ok: true, ...res };
 }
 
-/** Пометить провал + сгенерировать событие. */
+/** Пометить провал */
 async function markTopupFailed(topupId) {
   const t = await prisma.topUp.findUnique({ where: { id: topupId } });
   if (!t) return { ok: false, reason: "NOT_FOUND" };
@@ -110,23 +121,25 @@ async function markTopupFailed(topupId) {
   return { ok: true };
 }
 
-/** Postback от платёжки (InvId = наш orderId) */
+/**
+ * Postback от платёжки (нужно будет доработать под Platega format)
+ */
 async function handlePostback(body) {
-  const { Status, InvId } = body;
   console.log("[POSTBACK] body:", body);
 
-  const t = await prisma.topUp.findUnique({ where: { orderId: InvId } });
+  // TODO: уточнить у Platega поля callback
+  const { transactionId, status } = body;
+
+  const t = await prisma.topUp.findUnique({ where: { orderId: transactionId } });
   if (!t) {
-    console.warn("[POSTBACK] Topup by orderId not found:", InvId);
+    console.warn("[POSTBACK] Topup not found:", transactionId);
     return;
   }
 
-  if (Status === "SUCCESS") {
-    const res = await markTopupSuccessAndCredit(t.id);
-    console.log("[POSTBACK] success handled:", res);
+  if (status === "SUCCESS") {
+    await markTopupSuccessAndCredit(t.id);
   } else {
-    const res = await markTopupFailed(t.id);
-    console.log("[POSTBACK] failed handled:", res);
+    await markTopupFailed(t.id);
   }
 }
 
