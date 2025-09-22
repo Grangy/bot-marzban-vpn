@@ -32,6 +32,27 @@ function initNotifier(bot) {
     }
   });
 
+// Автоистечение (TIMEOUT)
+bus.on("topup.timeout", async ({ topupId }) => {
+  try {
+    const topup = await prisma.topUp.findUnique({ where: { id: topupId } });
+    if (!topup) return;
+
+    const user = await prisma.user.findUnique({ where: { id: topup.userId } });
+    if (!user?.chatId) return;
+
+    const text =
+      `⏳ Счёт на ${ruMoney(topup.amount)} истёк (не оплачен в течение 3 минут).\n` +
+      `Создайте новый запрос на пополнение.`;
+
+    await bot.telegram.sendMessage(user.chatId, text);
+    console.log(`[NOTIFY] Timeout sent to chatId=${user.chatId} for topup=${topupId}`);
+  } catch (e) {
+    console.error("[NOTIFY] Error sending timeout:", e);
+  }
+});
+
+
   // Неуспешная оплата (опционально — полезно иметь)
   bus.on("topup.failed", async ({ topupId }) => {
     try {

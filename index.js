@@ -3,6 +3,8 @@ const { bot } = require("./bot");
 const { prepareSqliteForLoad, prisma } = require("./db");
 const { createServer } = require("./server");
 const { initNotifier } = require("./notifier");
+const { startTopupCleaner } = require("./topupCleaner");
+
 
 const PORT = process.env.PAYMENT_PORT || 4000;
 
@@ -10,7 +12,7 @@ const PORT = process.env.PAYMENT_PORT || 4000;
   try {
     console.log("⚙️  Preparing database...");
     await prepareSqliteForLoad();
-
+    startTopupCleaner(); // 👈 запускаем автоистечение
     // Сервер поднимаем сразу
     console.log("🌐 Starting payment server...");
     const app = createServer();
@@ -51,24 +53,6 @@ const shutdown = async (signal) => {
     process.exit(1);
   }
 };
-
-function startTopupCleaner() {
-  const EXPIRATION_MS = 3 * 60 * 1000;
-
-  setInterval(async () => {
-    const threshold = new Date(Date.now() - EXPIRATION_MS);
-    const expired = await prisma.topUp.updateMany({
-      where: { status: "PENDING", createdAt: { lt: threshold } },
-      data: { status: "TIMEOUT" }
-    });
-    if (expired.count > 0) {
-      console.log(`⏳ Closed ${expired.count} expired topups`);
-    }
-  }, 60 * 1000); // раз в минуту
-}
-
-startTopupCleaner();
-
 
 process.once("SIGINT", () => shutdown("SIGINT"));
 process.once("SIGTERM", () => shutdown("SIGTERM"));
