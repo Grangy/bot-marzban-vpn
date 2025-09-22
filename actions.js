@@ -236,11 +236,11 @@ await editOrAnswer(ctx, successText, keyboard);
     return next();
   });
 
- bot.action(/^topup_(\d+)$/, async (ctx) => {
+bot.action(/^topup_(\d+)$/, async (ctx) => {
   await ctx.answerCbQuery();
   const amount = parseInt(ctx.match[1], 10);
 
-  // Проверяем активные пополнения
+  // Проверка лимита
   const pendingCount = await prisma.topUp.count({
     where: { userId: ctx.dbUser.id, status: "PENDING" }
   });
@@ -248,28 +248,32 @@ await editOrAnswer(ctx, successText, keyboard);
   if (pendingCount >= 3) {
     return ctx.reply("❌ У вас уже есть 3 неоплаченных счета.\nЗакройте их или дождитесь истечения срока.");
   }
-    if (isNaN(amount) || amount <= 0) {
-      console.warn(`[TOPUP] Invalid amount: "${ctx.match[1]}"`);
-      return ctx.reply("Некорректная сумма пополнения.", topupMenu());
-    }
 
-    console.log(`[TOPUP] User ${ctx.dbUser.id} requested topup for ${amount} ₽`);
-    try {
-      const { link, topup } = await createInvoice(ctx.dbUser.id, amount);
-      console.log(`[TOPUP] Created invoice: id=${topup.id}, orderId=${topup.orderId}, amount=${topup.amount}`);
+  if (isNaN(amount) || amount <= 0) {
+    console.warn(`[TOPUP] Invalid amount: "${ctx.match[1]}"`);
+    return ctx.reply("Некорректная сумма пополнения.", topupMenu());
+  }
 
-      await ctx.reply(
-        `💳 Для пополнения на ${ruMoney(amount)} перейдите по ссылке:\n${link}\n\nПосле оплаты вернитесь сюда и нажмите "Проверить оплату".`,
-        Markup.inlineKeyboard([
-          [Markup.button.callback("🔄 Проверить оплату", `check_topup_${topup.id}`)],
-          [Markup.button.callback("⬅️ Назад", "back")],
-        ])
-      );
-    } catch (e) {
-      console.error("[TOPUP] Error creating invoice:", e);
-      await ctx.reply("Ошибка при создании счёта. Попробуйте позже.", topupMenu());
-    }
-  });
+  console.log(`[TOPUP] User ${ctx.dbUser.id} requested topup for ${amount} ₽`);
+
+  try {
+    const { link, topup } = await createInvoice(ctx.dbUser.id, amount);
+    console.log(`[TOPUP] Created invoice: id=${topup.id}, orderId=${topup.orderId}, amount=${topup.amount}`);
+
+    await ctx.reply(
+      `💳 Для пополнения на ${ruMoney(amount)} нажмите «Оплата».\n\nПосле завершения вернитесь и нажмите «Проверить оплату».`,
+      Markup.inlineKeyboard([
+        [Markup.button.url("✅ Оплата", link)], // 👈 ссылка сразу
+        [Markup.button.callback("🔄 Проверить оплату", `check_topup_${topup.id}`)],
+        [Markup.button.callback("⬅️ Назад", "back")],
+      ])
+    );
+  } catch (e) {
+    console.error("[TOPUP] Error creating invoice:", e);
+    await ctx.reply("Ошибка при создании счёта. Попробуйте позже.", topupMenu());
+  }
+});
+
 
   bot.action(/^check_topup_(\d+)$/, async (ctx) => {
     await ctx.answerCbQuery();
