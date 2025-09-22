@@ -25,11 +25,16 @@ function createServer() {
   });
 
 
+  // Platega callback
   app.post("/payment/postback", async (req, res) => {
     try {
-      await handlePostback(req.body);
-      console.log("📩 Postback received:", req.body);
-      res.status(200).send("OK");
+      const result = await handlePostback(req);
+
+      if (result.ok) {
+        res.status(200).send("OK"); // ⚡ важно — Platega ждёт 200
+      } else {
+        res.status(400).send(result.reason || "FAIL");
+      }
     } catch (e) {
       console.error("❌ Postback error:", e);
       res.status(500).send("FAIL");

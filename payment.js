@@ -121,27 +121,43 @@ async function markTopupFailed(topupId) {
   return { ok: true };
 }
 
-/**
- * Postback от платёжки (нужно будет доработать под Platega format)
- */
-async function handlePostback(body) {
+/** Postback от Platega */
+async function handlePostback(req) {
+  const headers = req.headers;
+  const body = req.body;
+
+  console.log("[POSTBACK] headers:", headers);
   console.log("[POSTBACK] body:", body);
 
-  // TODO: уточнить у Platega поля callback
-  const { transactionId, status } = body;
-
-  const t = await prisma.topUp.findUnique({ where: { orderId: transactionId } });
-  if (!t) {
-    console.warn("[POSTBACK] Topup not found:", transactionId);
-    return;
+  // Проверяем заголовки безопасности
+  if (
+    headers["x-merchantid"] !== (process.env.PAYMENT_MERCHANT_ID || "") ||
+    headers["x-secret"] !== (process.env.PAYMENT_SECRET || "")
+  ) {
+    console.warn("[POSTBACK] Unauthorized callback attempt");
+    return { ok: false, reason: "UNAUTHORIZED" };
   }
 
-  if (status === "SUCCESS") {
+  const { id, status } = body;
+
+  const t = await prisma.topUp.findUnique({ where: { orderId: id } });
+  if (!t) {
+    console.warn("[POSTBACK] Topup not found by id:", id);
+    return { ok: false, reason: "NOT_FOUND" };
+  }
+
+  if (status === "CONFIRMED") {
     await markTopupSuccessAndCredit(t.id);
-  } else {
+    return { ok: true, status: "SUCCESS" };
+  } else if (status === "CANCELED") {
     await markTopupFailed(t.id);
+    return { ok: true, status: "FAILED" };
+  } else {
+    console.warn("[POSTBACK] Unknown status:", status);
+    return { ok: false, reason: "UNKNOWN_STATUS" };
   }
 }
+
 
 module.exports = {
   createInvoice,
