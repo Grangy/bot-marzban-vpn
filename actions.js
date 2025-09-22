@@ -3,6 +3,8 @@
   const { createInvoice, applyCreditIfNeeded } = require("./payment");
   const path = require("path");
   const { Markup } = require("telegraf");
+  const { balanceMenu } = require("./menus"); // 👈 импортируем
+
   const fs = require("fs");
 
 
@@ -114,6 +116,22 @@ bot.action("privacy", async (ctx) => {
   await editOrAnswer(ctx, text, infoMenu(ctx.dbUser.balance));
 });
 
+bot.action("balance_topup", async (ctx) => {
+  await ctx.answerCbQuery();
+  const text = "Выберите сумму пополнения:";
+  await editOrAnswer(ctx, text, topupMenu());
+});
+
+bot.action("balance_refresh", async (ctx) => {
+  await ctx.answerCbQuery();
+  const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+  const text =
+`💼 Баланс: ${ruMoney(user.balance)}
+
+Ваш промокод: \`${user.promoCode}\``;
+  await editOrAnswer(ctx, text, balanceMenu(user.balance));
+});
+
   // внутри registerActions(bot)
   bot.action(/^buy_(M1|M3|M6|M12)$/, async (ctx) => {
     await ctx.answerCbQuery();
@@ -218,13 +236,20 @@ await editOrAnswer(ctx, successText, keyboard);
   });
 
 
-    // Баланс — показать и пополнить
-    bot.action("balance", async (ctx) => {
-      await ctx.answerCbQuery();
-      const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
-      const text = `💼 Баланс: ${ruMoney(user.balance)}\nВыберите сумму пополнения:`;
-      await editOrAnswer(ctx, text, topupMenu());
-    });
+
+bot.action("balance", async (ctx) => {
+  await ctx.answerCbQuery();
+  const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+
+  const text =
+`💼 Баланс: ${ruMoney(user.balance)}
+
+Ваш промокод: \`${user.promoCode}\`
+(Активировать чужой код: /promo КОД)`;
+
+  await editOrAnswer(ctx, text, balanceMenu(user.balance));
+});
+
 
   const { createInvoice } = require("./payment");
 

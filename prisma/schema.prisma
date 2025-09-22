@@ -20,9 +20,14 @@ model User {
   telegramId  String
   chatId      String
   accountName String?
-  balance     Int           @default(0) // рубли, целое число
+  balance     Int           @default(0)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
+
+  // 👇 новые поля/связи
+  promoCode   String?       @unique
+  promoActivationsAsOwner   PromoActivation[] @relation("OwnerActivations")
+  promoActivationAsUser     PromoActivation?  @relation("UserActivation")
 
   subscriptions Subscription[]
   topUps         TopUp[]
@@ -31,6 +36,21 @@ model User {
   @@index([telegramId])
   @@index([chatId])
 }
+
+model PromoActivation {
+  id           Int      @id @default(autoincrement())
+  codeOwnerId  Int
+  activatorId  Int      @unique      // 🔒 один активатор — одна активация любого промо
+  amount       Int      @default(100)
+  createdAt    DateTime @default(now())
+
+  // связи
+  codeOwner    User     @relation("OwnerActivations", fields: [codeOwnerId], references: [id])
+  activator    User     @relation("UserActivation",   fields: [activatorId], references: [id])
+
+  @@index([codeOwnerId, createdAt])
+}
+
 
 model Subscription {
   id              Int              @id @default(autoincrement())

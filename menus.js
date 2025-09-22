@@ -83,6 +83,13 @@ function instructionsMenu() {
   ]);
 }
 
+function promoMenu() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback("🎁 Активировать чужой промокод", "promo_activate")],
+    [Markup.button.callback("⬅️ Назад", "back")],
+  ]);
+}
+
 function mainMenu(balanceRub = 0) {
   return Markup.inlineKeyboard([
     [
@@ -96,7 +103,7 @@ function mainMenu(balanceRub = 0) {
     [
       Markup.button.callback("📖 Инструкции", "instructions"),
       Markup.button.url("🛠 Тех.поддержка", "https://t.me/grangym")
-    ]
+    ],
   ]);
 }
 
@@ -107,6 +114,15 @@ function buyMenu() {
     [Markup.button.callback(`${PLANS.M3.label} — ${ruMoney(PLANS.M3.price)}`, "buy_M3")],
     [Markup.button.callback(`${PLANS.M6.label} — ${ruMoney(PLANS.M6.price)}`, "buy_M6")],
     [Markup.button.callback(`${PLANS.M12.label} — ${ruMoney(PLANS.M12.price)}`, "buy_M12")],
+    [Markup.button.callback("⬅️ Назад", "back")],
+  ]);
+}
+
+function balanceMenu(balanceRub = 0) {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback(`💼 Баланс: ${ruMoney(balanceRub)}`, "balance_refresh")],
+    [Markup.button.callback("➕ Пополнить", "balance_topup")],
+    [Markup.button.callback("🎁 Промокод", "promo")],   // 👈 новая кнопка
     [Markup.button.callback("⬅️ Назад", "back")],
   ]);
 }
@@ -129,9 +145,11 @@ module.exports = {
   formatDate,
   calcEndDate,
   mainMenu,
+  balanceMenu,
   buyMenu,
   topupMenu,
   getDisplayLabel, // 👈 добавляем сюда
   infoMenu, // 👈 экспортируем
   instructionsMenu,
+    promoMenu, // 👈 экспортируем 
 };

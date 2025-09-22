@@ -3,11 +3,15 @@ const { prisma } = require("./db");
 const { SubscriptionType } = require("@prisma/client");
 const { mainMenu } = require("./menus");
 const { registerActions } = require("./actions");
+const { registerPromo } = require("./promo");  // 👈
+const crypto = require("crypto");
+
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
 /* Middleware: учёт пользователя */
 bot.use(async (ctx, next) => {
+
   try {
     const from = ctx.from;
     const chat = ctx.chat;
@@ -30,6 +34,27 @@ bot.use(async (ctx, next) => {
           data: { userId: user.id, type: SubscriptionType.FREE, endDate: null },
         });
       }
+      // 👇 добавляем
+if (!user.promoCode) {
+  // несколько попыток на случай коллизии уникального индекса
+  let code = null, attempts = 0;
+  while (!code && attempts < 5) {
+    const candidate = genPromo();
+    try {
+      const updated = await prisma.user.update({
+        where: { id: user.id },
+        data: { promoCode: candidate },
+      });
+      code = updated.promoCode;
+    } catch (e) {
+      if (e.code === "P2002") { // unique violation
+        attempts++;
+      } else {
+        throw e;
+      }
+    }
+  }
+}
 
       ctx.dbUser = user;
     }
@@ -38,6 +63,11 @@ bot.use(async (ctx, next) => {
   }
   return next();
 });
+
+// простой генератор кода: 8 символов HEX
+function genPromo() {
+  return crypto.randomBytes(4).toString("hex").toUpperCase(); // напр. 'A1B2C3D4'
+}
 
 /* Команды */
 bot.start(async (ctx) => {
@@ -52,5 +82,6 @@ bot.command("menu", async (ctx) => {
 
 /* 👇 Обязательно регистрируем действия ДО экспорта */
 registerActions(bot);
+registerPromo(bot);
 
 module.exports = { bot };
