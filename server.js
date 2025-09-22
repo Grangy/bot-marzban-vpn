@@ -12,6 +12,19 @@ function createServer() {
     res.status(200).send("✅ Payment server is running");
   });
 
+    // === Result URL на /pay/success (postback от платёжки) ===
+  app.post("/pay/success", async (req, res) => {
+    try {
+      console.log("📩 Result postback /pay/success:", req.body);
+      await handlePostback(req.body); // меняем статус заказа в БД
+      res.status(200).send("OK");
+    } catch (e) {
+      console.error("❌ Result /pay/success error:", e);
+      res.status(500).send("FAIL");
+    }
+  });
+
+
   app.post("/payment/postback", async (req, res) => {
     try {
       await handlePostback(req.body);
