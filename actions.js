@@ -459,10 +459,17 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
           where: { id: ctx.dbUser.id },
           data: { balance: { decrement: plan.price } },
         });
-        return tx.subscription.update({
-          where: { id },
-          data: { endDate: newEndDate },
-        });
+return tx.subscription.update({
+  where: { id },
+  data: {
+    endDate: newEndDate,
+    // 👇 сброс напоминаний
+    notified3Days: false,
+    notified1Day: false,
+    lastExpiredReminderAt: null,
+  },
+});
+
       });
 
       // 🔥 вызов Marzban API extend

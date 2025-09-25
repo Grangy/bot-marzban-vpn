@@ -60,6 +60,9 @@ model Subscription {
   userId          Int
   user            User             @relation(fields: [userId], references: [id])
   subscriptionUrl String?          // 🔥 новая колонка
+  notified3Days            Boolean   @default(false)  // уведомление за 3 дня отправлено
+  notified1Day             Boolean   @default(false)  // уведомление за 1 день отправлено
+  lastExpiredReminderAt    DateTime?   
 
   @@index([userId])
   @@index([type, startDate])

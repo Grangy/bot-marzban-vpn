@@ -4,6 +4,7 @@ const { prepareSqliteForLoad, prisma } = require("./db");
 const { createServer } = require("./server");
 const { initNotifier } = require("./notifier");
 const { startTopupCleaner } = require("./topupCleaner");
+const { startSubExpiryNotifier } = require("./subExpiryNotifier");
 
 
 const PORT = process.env.PAYMENT_PORT || 4000;
@@ -13,6 +14,7 @@ const PORT = process.env.PAYMENT_PORT || 4000;
     console.log("⚙️  Preparing database...");
     await prepareSqliteForLoad();
     startTopupCleaner(); // 👈 запускаем автоистечение
+    startSubExpiryNotifier(bot);   // запускаем сканер подписок
     // Сервер поднимаем сразу
     console.log("🌐 Starting payment server...");
     const app = createServer();
