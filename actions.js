@@ -69,6 +69,14 @@ function getText(fileName) {
 // Видео-инструкция
 bot.action("guide_video", async (ctx) => {
   await ctx.answerCbQuery();
+  
+  // Проверяем существование файла
+  if (!fs.existsSync('video.mp4')) {
+    console.warn("Video file video.mp4 not found");
+    await editOrAnswer(ctx, "❌ Видео-файл не найден на сервере. Используйте текстовые инструкции.", instructionsMenu());
+    return;
+  }
+  
   try {
     await ctx.sendVideo({ source: 'video.mp4' }, { 
       caption: "📹 Видео-инструкция по настройке VPN\n\nСмотрите подробное видео по подключению к VPN сервису.",
@@ -76,7 +84,7 @@ bot.action("guide_video", async (ctx) => {
     });
   } catch (e) {
     console.error("Error sending video:", e);
-    await editOrAnswer(ctx, "❌ Видео временно недоступно. Используйте текстовые инструкции.", instructionsMenu());
+    await editOrAnswer(ctx, "❌ Ошибка отправки видео. Используйте текстовые инструкции.", instructionsMenu());
   }
 });
 
@@ -84,6 +92,13 @@ bot.action("guide_video", async (ctx) => {
 bot.action("guide_ios", async (ctx) => {
   await ctx.answerCbQuery();
   const text = getText("ios-macos.txt");
+  
+  if (!fs.existsSync('video.mp4')) {
+    console.warn("Video file video.mp4 not found");
+    await editOrAnswer(ctx, text, instructionsMenu());
+    return;
+  }
+  
   try {
     await ctx.sendVideo({ source: 'video.mp4' }, { 
       caption: text,
@@ -99,6 +114,13 @@ bot.action("guide_ios", async (ctx) => {
 bot.action("guide_android", async (ctx) => {
   await ctx.answerCbQuery();
   const text = getText("android.txt");
+  
+  if (!fs.existsSync('video.mp4')) {
+    console.warn("Video file video.mp4 not found");
+    await editOrAnswer(ctx, text, instructionsMenu());
+    return;
+  }
+  
   try {
     await ctx.sendVideo({ source: 'video.mp4' }, { 
       caption: text,
@@ -114,6 +136,13 @@ bot.action("guide_android", async (ctx) => {
 bot.action("guide_windows", async (ctx) => {
   await ctx.answerCbQuery();
   const text = getText("windows.txt");
+  
+  if (!fs.existsSync('video.mp4')) {
+    console.warn("Video file video.mp4 not found");
+    await editOrAnswer(ctx, text, instructionsMenu());
+    return;
+  }
+  
   try {
     await ctx.sendVideo({ source: 'video.mp4' }, { 
       caption: text,
