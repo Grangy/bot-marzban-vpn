@@ -6,3 +6,5 @@ node_modules
 /prisma/dev.db
 build.js
 all.js
+*.MOV
+*.mp4
