@@ -392,7 +392,13 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
         console.log("[CHECK] applyCreditIfNeeded:", creditRes);
 
         const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
-        return ctx.reply(`✅ Оплата подтверждена!\nБаланс: ${ruMoney(user.balance)}`);
+        
+        const text = `✅ Оплата подтверждена!\nБаланс: ${ruMoney(user.balance)}`;
+        const keyboard = Markup.inlineKeyboard([
+          [Markup.button.callback("📖 Инструкции по настройке", "instructions")]
+        ]);
+        
+        return ctx.reply(text, { reply_markup: keyboard.reply_markup });
       } else if (topup.status === "FAILED" || topup.status === "TIMEOUT") {
         return ctx.reply("❌ Оплата не прошла.");
       } else if (topup.status === "PENDING") {
