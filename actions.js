@@ -3,7 +3,7 @@
   const { createInvoice, applyCreditIfNeeded } = require("./payment");
   const path = require("path");
   const { Markup } = require("telegraf");
-  const { balanceMenu } = require("./menus"); // 👈 импортируем
+  const { balanceMenu, instructionsMenu } = require("./menus"); // 👈 импортируем
 
   const fs = require("fs");
 
@@ -70,21 +70,36 @@ function getText(fileName) {
 bot.action("guide_ios", async (ctx) => {
   await ctx.answerCbQuery();
   const text = getText("ios-macos.txt");
-  await editOrAnswer(ctx, text, instructionsMenu());
+  try {
+    await ctx.sendVideo({ source: 'video.mp4' }, { caption: text, ...instructionsMenu() });
+  } catch (e) {
+    console.error("Error sending video:", e);
+    await editOrAnswer(ctx, text, instructionsMenu());
+  }
 });
 
 // Android
 bot.action("guide_android", async (ctx) => {
   await ctx.answerCbQuery();
   const text = getText("android.txt");
-  await editOrAnswer(ctx, text, instructionsMenu());
+  try {
+    await ctx.sendVideo({ source: 'video.mp4' }, { caption: text, ...instructionsMenu() });
+  } catch (e) {
+    console.error("Error sending video:", e);
+    await editOrAnswer(ctx, text, instructionsMenu());
+  }
 });
 
 // Windows
 bot.action("guide_windows", async (ctx) => {
   await ctx.answerCbQuery();
   const text = getText("windows.txt");
-  await editOrAnswer(ctx, text, instructionsMenu());
+  try {
+    await ctx.sendVideo({ source: 'video.mp4' }, { caption: text, ...instructionsMenu() });
+  } catch (e) {
+    console.error("Error sending video:", e);
+    await editOrAnswer(ctx, text, instructionsMenu());
+  }
 });
     // Купить подписку — вывод планов
     bot.action("buy", async (ctx) => {

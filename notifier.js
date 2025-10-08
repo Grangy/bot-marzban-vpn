@@ -1,7 +1,8 @@
 // notifier.js
 const bus = require("./events");
 const { prisma } = require("./db");
-const { ruMoney } = require("./menus");
+const { ruMoney, instructionsMenu } = require("./menus");
+const { Markup } = require("telegraf");
 
 /**
  * Подключает слушателей к событиям оплаты и шлёт сообщения пользователю.
@@ -25,7 +26,11 @@ function initNotifier(bot) {
         `Сумма: ${ruMoney(topup.amount)}\n` +
         `Новый баланс: ${ruMoney(user.balance)}`;
 
-      await bot.telegram.sendMessage(user.chatId, text);
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback("📖 Инструкции по настройке", "instructions")]
+      ]);
+
+      await bot.telegram.sendMessage(user.chatId, text, keyboard);
       console.log(`[NOTIFY] Success sent to chatId=${user.chatId} for topup=${topupId}`);
     } catch (e) {
       console.error("[NOTIFY] Error sending success:", e);
