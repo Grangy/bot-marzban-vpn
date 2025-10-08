@@ -30,7 +30,7 @@ function initNotifier(bot) {
         [Markup.button.callback("📖 Инструкции по настройке", "instructions")]
       ]);
 
-      await bot.telegram.sendMessage(user.chatId, text, keyboard);
+      await bot.telegram.sendMessage(user.chatId, text, { reply_markup: keyboard.reply_markup });
       console.log(`[NOTIFY] Success sent to chatId=${user.chatId} for topup=${topupId}`);
     } catch (e) {
       console.error("[NOTIFY] Error sending success:", e);
