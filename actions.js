@@ -66,12 +66,29 @@ function getText(fileName) {
   return fs.readFileSync(filePath, "utf-8");
 }
 
+// Видео-инструкция
+bot.action("guide_video", async (ctx) => {
+  await ctx.answerCbQuery();
+  try {
+    await ctx.sendVideo({ source: 'video.mp4' }, { 
+      caption: "📹 Видео-инструкция по настройке VPN\n\nСмотрите подробное видео по подключению к VPN сервису.",
+      reply_markup: instructionsMenu().reply_markup
+    });
+  } catch (e) {
+    console.error("Error sending video:", e);
+    await editOrAnswer(ctx, "❌ Видео временно недоступно. Используйте текстовые инструкции.", instructionsMenu());
+  }
+});
+
 // iOS / macOS
 bot.action("guide_ios", async (ctx) => {
   await ctx.answerCbQuery();
   const text = getText("ios-macos.txt");
   try {
-    await ctx.sendVideo({ source: 'video.mp4' }, { caption: text, ...instructionsMenu() });
+    await ctx.sendVideo({ source: 'video.mp4' }, { 
+      caption: text,
+      reply_markup: instructionsMenu().reply_markup
+    });
   } catch (e) {
     console.error("Error sending video:", e);
     await editOrAnswer(ctx, text, instructionsMenu());
@@ -83,7 +100,10 @@ bot.action("guide_android", async (ctx) => {
   await ctx.answerCbQuery();
   const text = getText("android.txt");
   try {
-    await ctx.sendVideo({ source: 'video.mp4' }, { caption: text, ...instructionsMenu() });
+    await ctx.sendVideo({ source: 'video.mp4' }, { 
+      caption: text,
+      reply_markup: instructionsMenu().reply_markup
+    });
   } catch (e) {
     console.error("Error sending video:", e);
     await editOrAnswer(ctx, text, instructionsMenu());
@@ -95,7 +115,10 @@ bot.action("guide_windows", async (ctx) => {
   await ctx.answerCbQuery();
   const text = getText("windows.txt");
   try {
-    await ctx.sendVideo({ source: 'video.mp4' }, { caption: text, ...instructionsMenu() });
+    await ctx.sendVideo({ source: 'video.mp4' }, { 
+      caption: text,
+      reply_markup: instructionsMenu().reply_markup
+    });
   } catch (e) {
     console.error("Error sending video:", e);
     await editOrAnswer(ctx, text, instructionsMenu());
