@@ -3,7 +3,7 @@
   const { createInvoice, applyCreditIfNeeded } = require("./payment");
   const path = require("path");
   const { Markup } = require("telegraf");
-  const { balanceMenu, instructionsMenu } = require("./menus"); // 👈 импортируем
+  const { balanceMenu } = require("./menus"); // 👈 импортируем
 
   const fs = require("fs");
 
