@@ -54,6 +54,13 @@
 
   /* Регистрируем все действия */
   function registerActions(bot) {
+    // Назад — главное меню (регистрируем первым)
+    bot.action("back", async (ctx) => {
+      await ctx.answerCbQuery();
+      const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+      await editOrAnswer(ctx, "Выберите действие:", mainMenu(user.balance));
+    });
+
     // Информация — баланс и подписки
 bot.action("instructions", async (ctx) => {
   await ctx.answerCbQuery();
@@ -578,12 +585,6 @@ return tx.subscription.update({
     }
   });
 
-    // Назад — главное меню
-    bot.action("back", async (ctx) => {
-      await ctx.answerCbQuery();
-      const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
-      await editOrAnswer(ctx, "Выберите действие:", mainMenu(user.balance));
-    });
   }
 
   module.exports = { registerActions };
