@@ -3,7 +3,7 @@ const { prisma } = require("./db");
 const { Markup } = require("telegraf");
 const { ruMoney, promoMenu, PLANS } = require("./menus");
 const { SubscriptionType } = require("@prisma/client");
-const fetch = require("node-fetch");
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 const MARZBAN_API_URL = process.env.MARZBAN_API_URL;
 
