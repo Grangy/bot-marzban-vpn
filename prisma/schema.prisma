@@ -13,6 +13,7 @@ enum SubscriptionType {
   M3
   M6
   M12
+  PROMO_10D
 }
 
 model User {

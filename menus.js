@@ -27,6 +27,12 @@ const PLANS = {
     months: 12,
     type: "M12"
   },
+  PROMO_10D: {
+    label: "10 дней (промо)",
+    price: 0,
+    days: 10,
+    type: "PROMO_10D"
+  },
 };
 const TOPUP_AMOUNTS = [100, 270, 520, 1000];
 
@@ -47,6 +53,7 @@ function calcEndDate(months) {
 
 function getDisplayLabel(sub) {
   if (sub.type === "FREE") return "Free";
+  if (sub.type === "PROMO_10D") return "10 дней (промо)";
 
   if (sub.startDate && sub.endDate) {
     const start = new Date(sub.startDate);

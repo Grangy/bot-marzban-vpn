@@ -1,13 +1,62 @@
 // promo.js
 const { prisma } = require("./db");
 const { Markup } = require("telegraf");
-const { ruMoney, promoMenu } = require("./menus");
+const { ruMoney, promoMenu, PLANS } = require("./menus");
+const { SubscriptionType } = require("@prisma/client");
+const fetch = require("node-fetch");
 
-const PROMO_BONUS = 100;
+const MARZBAN_API_URL = process.env.MARZBAN_API_URL;
 
 function shareLink(text) {
   const base = "https://t.me/share/url";
   return `${base}?text=${encodeURIComponent(text)}`;
+}
+
+// Функция для создания пользователя в Marzban API
+async function createMarzbanUser(telegramId, subscriptionId) {
+  if (!MARZBAN_API_URL || MARZBAN_API_URL === "your_marzban_api_url") {
+    // Если API не настроен, возвращаем фейковую ссылку
+    return `https://fake-vpn.local/subscription/${subscriptionId}`;
+  }
+
+  const username = `${telegramId}_PROMO_${subscriptionId}`;
+  const expireSeconds = 10 * 24 * 60 * 60; // 10 дней в секундах
+  const expire = Math.floor(Date.now() / 1000) + expireSeconds;
+
+  const userData = {
+    username: username,
+    proxies: {
+      vless: {
+        id: require("crypto").randomUUID(),
+        flow: "xtls-rprx-vision"
+      }
+    },
+    expire: expire,
+    data_limit: 0, // без ограничений
+    data_limit_reset_strategy: "no_reset"
+  };
+
+  try {
+    const response = await fetch(`${MARZBAN_API_URL}/users`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.MARZBAN_TOKEN || "fake_token"}`
+      },
+      body: JSON.stringify(userData)
+    });
+
+    if (!response.ok) {
+      console.error("[Marzban] Failed to create user:", await response.text());
+      return `https://fake-vpn.local/subscription/${subscriptionId}`;
+    }
+
+    const result = await response.json();
+    return result.subscription_url || `https://fake-vpn.local/subscription/${subscriptionId}`;
+  } catch (error) {
+    console.error("[Marzban] Error creating user:", error);
+    return `https://fake-vpn.local/subscription/${subscriptionId}`;
+  }
 }
 
 function registerPromo(bot) {
@@ -24,10 +73,10 @@ function registerPromo(bot) {
 `🎁 Ваш промокод: \`${me.promoCode}\`
 Активаций: ${activations}
 
-Подарок: любой пользователь, который введёт ваш код, получит +${ruMoney(PROMO_BONUS)}. 
+Подарок: любой пользователь, который введёт ваш код, получит VPN на 10 дней. 
 Вы сами можете активировать только ЧУЖОЙ код один раз (команда ниже).`;
 
-    const shareText = `Мой промокод ${me.promoCode} — бонус +${PROMO_BONUS}₽`;
+    const shareText = `Мой промокод ${me.promoCode} — VPN на 10 дней`;
     const kb = Markup.inlineKeyboard([
       [Markup.button.url("🔗 Поделиться кодом", shareLink(shareText))],
       [Markup.button.callback("🎁 Активировать чужой промокод", "promo_activate")],
@@ -78,21 +127,29 @@ function registerPromo(bot) {
         });
         if (already) return { ok: false, reason: "ALREADY" };
 
-        // создаём запись и зачисляем бонус
+        // создаём запись активации
         await tx.promoActivation.create({
           data: {
             codeOwnerId: owner.id,
             activatorId: me.id,
-            amount: PROMO_BONUS,
+            amount: 0, // больше не начисляем деньги
           },
         });
 
-        await tx.user.update({
-          where: { id: me.id },
-          data: { balance: { increment: PROMO_BONUS } },
+        // создаём подписку на 10 дней
+        const endDate = new Date();
+        endDate.setDate(endDate.getDate() + 10);
+        
+        const sub = await tx.subscription.create({
+          data: {
+            userId: me.id,
+            type: SubscriptionType.PROMO_10D,
+            startDate: new Date(),
+            endDate: endDate,
+          },
         });
 
-        return { ok: true, owner };
+        return { ok: true, owner, sub };
       });
 
       if (!result.ok) {
@@ -104,6 +161,15 @@ function registerPromo(bot) {
           return ctx.reply("❌ Вы уже активировали промокод ранее.");
         return ctx.reply("❌ Не удалось активировать промокод.");
       }
+
+      // создаём VPN пользователя в Marzban и получаем ссылку
+      const subscriptionUrl = await createMarzbanUser(ctx.dbUser.telegramId, result.sub.id);
+      
+      // обновляем подписку с полученной ссылкой
+      await prisma.subscription.update({
+        where: { id: result.sub.id },
+        data: { subscriptionUrl }
+      });
 
       // оповестим владельца кода (если возможен DM)
       try {
@@ -118,9 +184,8 @@ function registerPromo(bot) {
         // молча игнорируем
       }
 
-      // покажем новый баланс
-      const meAfter = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
-      return ctx.reply(`✅ Промокод применён! Бонус: +${ruMoney(PROMO_BONUS)}\nНовый баланс: ${ruMoney(meAfter.balance)}`);
+      // показываем успешную активацию с ссылкой на VPN
+      return ctx.reply(`✅ Промокод применён! Вы получили VPN на 10 дней.\n\n🔗 Ссылка на подписку: ${subscriptionUrl}\n\nСкопируйте ссылку и настройте VPN в своём приложении.`);
     } catch (e) {
       console.error("[PROMO] error:", e);
       return ctx.reply("Ошибка при активации промокода. Попробуйте позже.");
