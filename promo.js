@@ -14,7 +14,10 @@ function shareLink(text) {
 
 // Функция для создания пользователя в Marzban API
 async function createMarzbanUser(telegramId, subscriptionId) {
+  console.log("[Marzban] API URL:", MARZBAN_API_URL);
+  
   if (!MARZBAN_API_URL || MARZBAN_API_URL === "your_marzban_api_url") {
+    console.log("[Marzban] Using fake URL - API not configured");
     // Если API не настроен, возвращаем фейковую ссылку
     return `https://fake-vpn.local/subscription/${subscriptionId}`;
   }
@@ -37,6 +40,9 @@ async function createMarzbanUser(telegramId, subscriptionId) {
   };
 
   try {
+    console.log("[Marzban] Creating user with data:", JSON.stringify(userData, null, 2));
+    console.log("[Marzban] Request URL:", `${MARZBAN_API_URL}/users`);
+    
     const response = await fetch(`${MARZBAN_API_URL}/users`, {
       method: "POST",
       headers: {
@@ -46,12 +52,17 @@ async function createMarzbanUser(telegramId, subscriptionId) {
       body: JSON.stringify(userData)
     });
 
+    console.log("[Marzban] Response status:", response.status);
+    console.log("[Marzban] Response headers:", response.headers);
+
     if (!response.ok) {
-      console.error("[Marzban] Failed to create user:", await response.text());
+      const errorText = await response.text();
+      console.error("[Marzban] Failed to create user:", errorText);
       return `https://fake-vpn.local/subscription/${subscriptionId}`;
     }
 
     const result = await response.json();
+    console.log("[Marzban] Response data:", result);
     return result.subscription_url || `https://fake-vpn.local/subscription/${subscriptionId}`;
   } catch (error) {
     console.error("[Marzban] Error creating user:", error);
