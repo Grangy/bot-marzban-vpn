@@ -44,7 +44,7 @@
         await ctx.answerCbQuery("Актуально");
         return;
       }
-      if (desc.includes("message can't be edited")) {
+      if (desc.includes("message can't be edited") || desc.includes("there is no text in the message to edit")) {
         await ctx.reply(text, keyboard);
         return;
       }
