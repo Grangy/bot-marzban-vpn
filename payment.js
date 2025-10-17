@@ -1,6 +1,6 @@
 // payment.js
 const { prisma } = require("./db");
-const fetch = require("node-fetch");
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 const { v4: uuidv4 } = require("uuid");
 const bus = require("./events");
 
