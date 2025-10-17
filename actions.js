@@ -58,7 +58,15 @@
     bot.action("back", async (ctx) => {
       await ctx.answerCbQuery();
       const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
-      await editOrAnswer(ctx, "Выберите действие:", mainMenu(user.balance));
+      
+      try {
+        // Сначала пытаемся отредактировать сообщение
+        await editOrAnswer(ctx, "Выберите действие:", mainMenu(user.balance));
+      } catch (error) {
+        // Если не получается отредактировать (например, после видео), отправляем новое сообщение
+        console.log("[DEBUG] Cannot edit message, sending new one:", error.message);
+        await ctx.reply("Выберите действие:", mainMenu(user.balance));
+      }
     });
 
     // Информация — баланс и подписки
