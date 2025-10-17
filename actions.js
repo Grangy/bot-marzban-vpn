@@ -160,7 +160,7 @@ bot.action("guide_windows", async (ctx) => {
     });
 
     // Покупка конкретного плана
-  const fetch = require("node-fetch"); // нужен npm i node-fetch@2
+  const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
   // Информация — теперь открывает подменю
 bot.action("info", async (ctx) => {
