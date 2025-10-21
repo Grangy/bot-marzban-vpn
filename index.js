@@ -5,6 +5,7 @@ const { createServer } = require("./server");
 const { initNotifier } = require("./notifier");
 const { startTopupCleaner } = require("./topupCleaner");
 const { startSubExpiryNotifier } = require("./subExpiryNotifier");
+const { startBackupScheduler } = require("./backup");
 
 
 const PORT = process.env.PAYMENT_PORT || 4000;
@@ -15,6 +16,7 @@ const PORT = process.env.PAYMENT_PORT || 4000;
     await prepareSqliteForLoad();
     startTopupCleaner(); // 👈 запускаем автоистечение
     startSubExpiryNotifier(bot);   // запускаем сканер подписок
+    startBackupScheduler(); // 👈 запускаем планировщик бэкапов
     // Сервер поднимаем сразу
     console.log("🌐 Starting payment server...");
     const app = createServer();
