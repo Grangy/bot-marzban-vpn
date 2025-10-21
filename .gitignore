@@ -4,6 +4,8 @@ node_modules
 
 /generated/prisma
 /prisma/dev.db
+/prisma/dev.db-shm
+/prisma/dev.db-wal
 build.js
 all.js
 *.MOV
