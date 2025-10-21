@@ -394,9 +394,18 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
 
     try {
       const topup = await prisma.topUp.findUnique({ where: { id } });
-      if (!topup || topup.userId !== ctx.dbUser.id) {
-        console.warn(`[CHECK] Topup not found or another user. id=${id}, userId=${ctx.dbUser.id}`);
-        return ctx.reply("Пополнение не найдено.");
+      if (!topup) {
+        console.warn(`[CHECK] Topup not found. id=${id}, userId=${ctx.dbUser.id}`);
+        const keyboard = Markup.inlineKeyboard([
+          [Markup.button.callback("💳 Пополнить баланс", "balance_topup")],
+          [Markup.button.callback("⬅️ В меню", "back")]
+        ]);
+        return ctx.reply("❌ Пополнение не найдено. Возможно, оно было удалено или истекло.\n\nСоздайте новый запрос на пополнение.", keyboard);
+      }
+      
+      if (topup.userId !== ctx.dbUser.id) {
+        console.warn(`[CHECK] Topup belongs to another user. id=${id}, topupUserId=${topup.userId}, currentUserId=${ctx.dbUser.id}`);
+        return ctx.reply("❌ Это пополнение принадлежит другому пользователю.");
       }
 
       console.log(`[CHECK] Found topup: id=${topup.id}, amount=${topup.amount}, status=${topup.status}, orderId=${topup.orderId}, credited=${topup.credited}`);

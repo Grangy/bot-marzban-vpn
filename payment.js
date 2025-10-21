@@ -42,8 +42,15 @@ async function createInvoice(userId, amount, description = "Пополнение
     description,
     return: RETURN_URL,
     failedUrl: FAIL_URL,
+    callbackUrl: `${process.env.PAYMENT_CALLBACK_URL || "https://maxvpn.live"}/payment/postback`,
     payload: String(userId), // полезно для связи
   };
+
+  console.log(`[TOPUP] Sending request to Platega:`, {
+    url: API_URL,
+    merchantId: MERCHANT_ID,
+    body: body
+  });
 
   const response = await fetch(API_URL, {
     method: "POST",
@@ -56,6 +63,7 @@ async function createInvoice(userId, amount, description = "Пополнение
   });
 
   const data = await response.json();
+  console.log(`[TOPUP] Platega response:`, { status: response.status, data });
 
   if (!response.ok || !data.redirect) {
     console.error("[Platega] error response:", data);

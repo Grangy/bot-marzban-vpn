@@ -12,6 +12,12 @@ function createServer() {
     res.status(200).send("✅ Payment server is running");
   });
 
+  // Тестовый endpoint для проверки webhook'ов
+  app.post("/test-webhook", (req, res) => {
+    console.log("🧪 Test webhook received:", req.body);
+    res.status(200).json({ ok: true, received: req.body });
+  });
+
     // === Result URL на /pay/success (postback от платёжки) ===
   app.post("/pay/success", async (req, res) => {
     try {
@@ -27,12 +33,21 @@ function createServer() {
 
   // Platega callback
   app.post("/payment/postback", async (req, res) => {
+    console.log("🔔 Platega webhook received:", {
+      headers: req.headers,
+      body: req.body,
+      ip: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+    
     try {
       const result = await handlePostback(req);
+      console.log("🔔 Webhook processing result:", result);
 
       if (result.ok) {
         res.status(200).send("OK"); // ⚡ важно — Platega ждёт 200
       } else {
+        console.warn("🔔 Webhook failed:", result.reason);
         res.status(400).send(result.reason || "FAIL");
       }
     } catch (e) {
