@@ -58,19 +58,33 @@ async function createInvoice(userId, amount, description = "Пополнение
     };
   }
 
+  // Валидация данных перед отправкой
+  if (!orderId || !amount || !description) {
+    throw new Error("Некорректные данные для создания платежа");
+  }
+
   const body = {
     paymentMethod: DEFAULT_METHOD, // 2 = QR/СБП
     id: orderId, // UUID транзакции
     paymentDetails: {
-      amount,
+      amount: Number(amount), // Убеждаемся что это число
       currency: "RUB",
     },
-    description,
+    description: String(description), // Убеждаемся что это строка
     return: RETURN_URL,
     failedUrl: FAIL_URL,
     callbackUrl: `${process.env.PAYMENT_CALLBACK_URL || "https://maxvpn.live"}/payment/postback`,
     payload: String(userId), // полезно для связи
   };
+
+  // Дополнительная валидация
+  if (!body.paymentDetails.amount || body.paymentDetails.amount <= 0) {
+    throw new Error("Некорректная сумма платежа");
+  }
+
+  if (!body.id || !body.description) {
+    throw new Error("Некорректные параметры платежа");
+  }
 
   console.log(`[TOPUP] Sending request to Platega:`, {
     url: API_URL,

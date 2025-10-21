@@ -346,7 +346,9 @@ bot.action("balance", async (ctx) => {
   });
 
 bot.action(/^topup_(\d+)$/, async (ctx) => {
-  await ctx.answerCbQuery();
+  // Сразу отвечаем на callback query чтобы избежать timeout
+  await ctx.answerCbQuery("⏳ Создаём счёт...");
+  
   const amount = parseInt(ctx.match[1], 10);
 
   // Проверка лимита
@@ -366,11 +368,18 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
   console.log(`[TOPUP] User ${ctx.dbUser.id} requested topup for ${amount} ₽`);
 
   try {
-    const { link, topup } = await createInvoice(ctx.dbUser.id, amount);
-    console.log(`[TOPUP] Created invoice: id=${topup.id}, orderId=${topup.orderId}, amount=${topup.amount}`);
+    const result = await createInvoice(ctx.dbUser.id, amount);
+    const { link, topup, isFallback } = result;
+    console.log(`[TOPUP] Created invoice: id=${topup.id}, orderId=${topup.orderId}, amount=${topup.amount}, isFallback=${isFallback}`);
+
+    let messageText = `💳 Для пополнения на ${ruMoney(amount)} нажмите «Оплата».\n\nПосле завершения вернитесь и нажмите «Проверить оплату».`;
+    
+    if (isFallback) {
+      messageText = `⚠️ Платежная система временно недоступна.\n\n💳 Для пополнения на ${ruMoney(amount)} перейдите по ссылке ниже для ручной обработки.\n\nПосле оплаты обратитесь в поддержку: @grangym`;
+    }
 
     await ctx.reply(
-      `💳 Для пополнения на ${ruMoney(amount)} нажмите «Оплата».\n\nПосле завершения вернитесь и нажмите «Проверить оплату».`,
+      messageText,
       Markup.inlineKeyboard([
         [Markup.button.url("🔗 НАЖМИТЕ ДЛЯ ОПЛАТЫ", link)], // 👈 ссылка сразу
         [Markup.button.callback("🔄 Проверить оплату", `check_topup_${topup.id}`)],
