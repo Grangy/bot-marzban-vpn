@@ -146,6 +146,13 @@ function topupMenu() {
   ]);
 }
 
+function paymentSuccessMenu() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback("🚀 Активировать VPN", "buy")],
+    [Markup.button.callback("📖 Инструкции по настройке", "instructions")],
+  ]);
+}
+
 module.exports = {
   PLANS,
   TOPUP_AMOUNTS,
@@ -156,6 +163,7 @@ module.exports = {
   balanceMenu,
   buyMenu,
   topupMenu,
+  paymentSuccessMenu, // 👈 новая функция
   getDisplayLabel, // 👈 добавляем сюда
   infoMenu, // 👈 экспортируем
   instructionsMenu,

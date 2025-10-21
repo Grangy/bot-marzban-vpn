@@ -17,6 +17,7 @@
     mainMenu,
     buyMenu,
     topupMenu,
+    paymentSuccessMenu, // 👈 новая функция
     getDisplayLabel, // 👈 добавляем
     infoMenu,
     instructionsMenu,
@@ -302,8 +303,9 @@ if (lastSub.subscriptionUrl) {
   successText += `\n\n🔗 Ваша ссылка: ${lastSub.subscriptionUrl}`;
 }
 
-// Добавляем кнопку "Инструкции" в меню
+// Добавляем кнопки для активации VPN и инструкций
 const keyboard = Markup.inlineKeyboard([
+  [Markup.button.callback("🚀 Активировать VPN", "buy")],
   [Markup.button.callback("📖 Инструкции", "instructions")],
   [Markup.button.callback("⬅️ В меню", "back")]
 ]);
@@ -418,11 +420,8 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
         const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
         
         const text = `✅ Оплата подтверждена!\nБаланс: ${ruMoney(user.balance)}`;
-        const keyboard = Markup.inlineKeyboard([
-          [Markup.button.callback("📖 Инструкции по настройке", "instructions")]
-        ]);
         
-        return ctx.reply(text, { reply_markup: keyboard.reply_markup });
+        return ctx.reply(text, paymentSuccessMenu());
       } else if (topup.status === "FAILED" || topup.status === "TIMEOUT") {
         return ctx.reply("❌ Оплата не прошла.");
       } else if (topup.status === "PENDING") {
