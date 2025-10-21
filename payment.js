@@ -256,13 +256,22 @@ async function handlePostback(req) {
   }
 
   if (status === "CONFIRMED") {
+    console.log(`[POSTBACK] Payment confirmed for topup ${t.id} (orderId: ${id})`);
     await markTopupSuccessAndCredit(t.id);
     return { ok: true, status: "SUCCESS" };
   } else if (status === "CANCELED") {
+    console.log(`[POSTBACK] Payment canceled for topup ${t.id} (orderId: ${id})`);
+    console.log(`[POSTBACK] Cancel details:`, { 
+      topupId: t.id, 
+      orderId: id, 
+      amount: body.amount, 
+      userId: t.userId,
+      createdAt: t.createdAt 
+    });
     await markTopupFailed(t.id);
     return { ok: true, status: "FAILED" };
   } else {
-    console.warn("[POSTBACK] Unknown status:", status);
+    console.warn("[POSTBACK] Unknown status:", status, "for orderId:", id);
     return { ok: false, reason: "UNKNOWN_STATUS" };
   }
 }

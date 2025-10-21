@@ -12,6 +12,47 @@ function createServer() {
     res.status(200).send("✅ Payment server is running");
   });
 
+  // Статистика платежей
+  app.get("/payment/stats", async (req, res) => {
+    try {
+      const { prisma } = require("./db");
+      
+      const stats = await prisma.topUp.groupBy({
+        by: ['status'],
+        _count: {
+          id: true,
+        },
+        _sum: {
+          amount: true,
+        },
+        where: {
+          createdAt: {
+            gte: new Date(Date.now() - 24 * 60 * 60 * 1000) // За последние 24 часа
+          }
+        }
+      });
+
+      const totalStats = await prisma.topUp.groupBy({
+        by: ['status'],
+        _count: {
+          id: true,
+        },
+        _sum: {
+          amount: true,
+        }
+      });
+
+      res.json({
+        last24h: stats,
+        total: totalStats,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error("Stats error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Тестовый endpoint для проверки webhook'ов
   app.post("/test-webhook", (req, res) => {
     console.log("🧪 Test webhook received:", req.body);
