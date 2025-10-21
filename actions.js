@@ -379,7 +379,19 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
     );
   } catch (e) {
     console.error("[TOPUP] Error creating invoice:", e);
-    await ctx.reply("Ошибка при создании счёта. Попробуйте позже.", topupMenu());
+    
+    // Более информативное сообщение об ошибке
+    let errorMessage = "Ошибка при создании счёта.";
+    
+    if (e.message.includes("API")) {
+      errorMessage = "Временная ошибка платежной системы. Попробуйте позже или обратитесь в поддержку.";
+    } else if (e.message.includes("сеть") || e.message.includes("Network")) {
+      errorMessage = "Проблемы с сетью. Попробуйте позже.";
+    } else if (e.message.includes("авторизации")) {
+      errorMessage = "Ошибка конфигурации платежной системы. Обратитесь в поддержку.";
+    }
+    
+    await ctx.reply(`${errorMessage}\n\nЕсли проблема повторяется, обратитесь в поддержку: @grangym`, topupMenu());
   }
 });
 

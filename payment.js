@@ -32,6 +32,32 @@ async function createInvoice(userId, amount, description = "Пополнение
     };
   }
 
+  // Функция для создания fallback платежа
+  async function createFallbackPayment() {
+    console.warn("[TOPUP] Using fallback payment system due to API issues");
+    console.warn("[TOPUP] Fallback details:", { orderId, amount, userId });
+    
+    // Помечаем topup как fallback
+    await prisma.topUp.update({
+      where: { id: topup.id },
+      data: { 
+        status: "PENDING",
+        billId: `fallback-${orderId}` // Отмечаем как fallback
+      }
+    });
+
+    // Создаем простую ссылку для ручной оплаты
+    const fallbackLink = `${process.env.PAYMENT_CALLBACK_URL || "https://maxvpn.live"}/payment/manual/${orderId}`;
+    
+    console.warn("[TOPUP] Fallback payment created:", { orderId, fallbackLink });
+    
+    return {
+      link: fallbackLink,
+      topup: { ...topup, billId: `fallback-${orderId}` },
+      isFallback: true
+    };
+  }
+
   const body = {
     paymentMethod: DEFAULT_METHOD, // 2 = QR/СБП
     id: orderId, // UUID транзакции
@@ -52,22 +78,83 @@ async function createInvoice(userId, amount, description = "Пополнение
     body: body
   });
 
-  const response = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-MerchantId": MERCHANT_ID,
-      "X-Secret": SECRET_KEY,
-    },
-    body: JSON.stringify(body),
-  });
+  let response;
+  try {
+    response = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-MerchantId": MERCHANT_ID,
+        "X-Secret": SECRET_KEY,
+      },
+      body: JSON.stringify(body),
+      timeout: 10000, // 10 секунд таймаут
+    });
+  } catch (fetchError) {
+    console.error("[Platega] Network error:", fetchError);
+    
+    // Если сеть недоступна, используем fallback
+    if (fetchError.code === 'ENOTFOUND' || fetchError.code === 'ECONNREFUSED' || fetchError.code === 'ETIMEDOUT') {
+      console.warn("[TOPUP] Network error, using fallback payment system");
+      return await createFallbackPayment();
+    }
+    
+    throw new Error("Ошибка сети при обращении к платежной системе");
+  }
 
-  const data = await response.json();
+  let data;
+  try {
+    data = await response.json();
+  } catch (parseError) {
+    console.error("[Platega] Failed to parse response:", parseError);
+    const responseText = await response.text();
+    console.error("[Platega] Raw response:", responseText);
+    throw new Error("Неверный ответ от платежной системы");
+  }
+
   console.log(`[TOPUP] Platega response:`, { status: response.status, data });
 
-  if (!response.ok || !data.redirect) {
-    console.error("[Platega] error response:", data);
-    throw new Error("Не удалось создать счёт в Platega");
+  if (!response.ok) {
+    console.error("[Platega] API error:", {
+      status: response.status,
+      statusText: response.statusText,
+      data: data,
+      requestBody: body
+    });
+    
+    // Детальная обработка ошибок
+    if (response.status === 400) {
+      if (data?.Message) {
+        console.error(`[Platega] 400 Error: ${data.Message}`);
+        
+        // Если это критическая ошибка API, используем fallback
+        if (data.Message.includes("Object reference not set") || 
+            data.Message.includes("not set to an instance")) {
+          console.warn("[TOPUP] Critical API error, using fallback payment system");
+          return await createFallbackPayment();
+        }
+        
+        throw new Error(`Ошибка API: ${data.Message}`);
+      } else {
+        console.warn("[TOPUP] Unknown 400 error, using fallback payment system");
+        return await createFallbackPayment();
+      }
+    } else if (response.status === 401) {
+      throw new Error("Ошибка авторизации в платежной системе");
+    } else if (response.status === 403) {
+      throw new Error("Доступ к платежной системе запрещен");
+    } else if (response.status >= 500) {
+      console.warn("[TOPUP] Server error, using fallback payment system");
+      return await createFallbackPayment();
+    } else {
+      console.warn("[TOPUP] Unknown error, using fallback payment system");
+      return await createFallbackPayment();
+    }
+  }
+
+  if (!data.redirect) {
+    console.error("[Platega] Missing redirect in response:", data);
+    throw new Error("Платежная система не вернула ссылку для оплаты");
   }
 
   return { link: data.redirect, topup };

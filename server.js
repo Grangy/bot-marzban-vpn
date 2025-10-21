@@ -80,6 +80,25 @@ function createServer() {
     }
   });
 
+  // Fallback платежи - ручная обработка
+  app.get("/payment/manual/:orderId", (req, res) => {
+    const { orderId } = req.params;
+    res.send(`
+      <html>
+        <head>
+          <title>Ручная обработка платежа</title>
+          <meta charset="utf-8">
+        </head>
+        <body>
+          <h1>Обработка платежа</h1>
+          <p><strong>Номер заказа:</strong> ${orderId}</p>
+          <p>Платежная система временно недоступна. Обратитесь в поддержку для ручной обработки платежа.</p>
+          <p>Техподдержка: <a href="https://t.me/grangym">@grangym</a></p>
+        </body>
+      </html>
+    `);
+  });
+
   return app;
 }
 
