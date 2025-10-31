@@ -303,9 +303,8 @@ if (lastSub.subscriptionUrl) {
   successText += `\n\n🔗 Ваша ссылка: ${lastSub.subscriptionUrl}`;
 }
 
-// Добавляем кнопки для активации VPN и инструкций
+// Добавляем кнопки для инструкций
 const keyboard = Markup.inlineKeyboard([
-  [Markup.button.callback("🚀 Активировать VPN", "buy")],
   [Markup.button.callback("📖 Инструкции", "instructions")],
   [Markup.button.callback("⬅️ В меню", "back")]
 ]);
