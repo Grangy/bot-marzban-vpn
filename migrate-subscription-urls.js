@@ -7,12 +7,21 @@ async function migrateSubscriptionUrls() {
   try {
     console.log("🔍 Поиск подписок со старыми ссылками...");
 
-    // Находим все подписки с subscriptionUrl, содержащим старый домен
+    // Находим все подписки с subscriptionUrl, содержащим старый домен или новый без https://
     const subscriptions = await prisma.subscription.findMany({
       where: {
-        subscriptionUrl: {
-          contains: "vpn.maxvpn.live",
-        },
+        OR: [
+          {
+            subscriptionUrl: {
+              contains: "vpn.maxvpn.live",
+            },
+          },
+          {
+            subscriptionUrl: {
+              startsWith: "vpn.grangy.ru/",
+            },
+          },
+        ],
       },
       select: {
         id: true,
@@ -33,11 +42,19 @@ async function migrateSubscriptionUrls() {
     for (const sub of subscriptions) {
       try {
         const oldUrl = sub.subscriptionUrl;
-        // Заменяем https://vpn.maxvpn.live/sub/ на vpn.grangy.ru/
-        const newUrl = oldUrl.replace(
-          /https?:\/\/vpn\.maxvpn\.live\/sub\//,
-          "vpn.grangy.ru/"
-        );
+        let newUrl = oldUrl;
+        
+        // Заменяем https://vpn.maxvpn.live/sub/ на https://vpn.grangy.ru/
+        if (oldUrl.includes("vpn.maxvpn.live")) {
+          newUrl = oldUrl.replace(
+            /https?:\/\/vpn\.maxvpn\.live\/sub\//,
+            "https://vpn.grangy.ru/"
+          );
+        }
+        // Исправляем ссылки vpn.grangy.ru/... на https://vpn.grangy.ru/...
+        else if (oldUrl.startsWith("vpn.grangy.ru/")) {
+          newUrl = "https://" + oldUrl;
+        }
 
         if (oldUrl === newUrl) {
           console.log(`⚠️  Подписка ${sub.id}: ссылка не изменилась, пропускаем`);
