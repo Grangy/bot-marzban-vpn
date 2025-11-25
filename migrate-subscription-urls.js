@@ -7,7 +7,7 @@ async function migrateSubscriptionUrls() {
   try {
     console.log("🔍 Поиск подписок со старыми ссылками...");
 
-    // Находим все подписки с subscriptionUrl, содержащим старый домен или новый без https://
+    // Находим все подписки с subscriptionUrl, содержащим старый домен или новый без /sub/
     const subscriptions = await prisma.subscription.findMany({
       where: {
         OR: [
@@ -20,6 +20,22 @@ async function migrateSubscriptionUrls() {
             subscriptionUrl: {
               startsWith: "vpn.grangy.ru/",
             },
+          },
+          {
+            AND: [
+              {
+                subscriptionUrl: {
+                  startsWith: "https://vpn.grangy.ru/",
+                },
+              },
+              {
+                subscriptionUrl: {
+                  not: {
+                    contains: "/sub/",
+                  },
+                },
+              },
+            ],
           },
         ],
       },
@@ -44,16 +60,22 @@ async function migrateSubscriptionUrls() {
         const oldUrl = sub.subscriptionUrl;
         let newUrl = oldUrl;
         
-        // Заменяем https://vpn.maxvpn.live/sub/ на https://vpn.grangy.ru/
+        // Заменяем https://vpn.maxvpn.live/sub/ на https://vpn.grangy.ru/sub/
         if (oldUrl.includes("vpn.maxvpn.live")) {
           newUrl = oldUrl.replace(
             /https?:\/\/vpn\.maxvpn\.live\/sub\//,
-            "https://vpn.grangy.ru/"
+            "https://vpn.grangy.ru/sub/"
           );
         }
-        // Исправляем ссылки vpn.grangy.ru/... на https://vpn.grangy.ru/...
+        // Исправляем ссылки vpn.grangy.ru/... на https://vpn.grangy.ru/sub/...
         else if (oldUrl.startsWith("vpn.grangy.ru/")) {
-          newUrl = "https://" + oldUrl;
+          const path = oldUrl.replace("vpn.grangy.ru/", "");
+          newUrl = "https://vpn.grangy.ru/sub/" + path;
+        }
+        // Исправляем ссылки https://vpn.grangy.ru/... (без /sub/) на https://vpn.grangy.ru/sub/...
+        else if (oldUrl.startsWith("https://vpn.grangy.ru/") && !oldUrl.includes("/sub/")) {
+          const path = oldUrl.replace("https://vpn.grangy.ru/", "");
+          newUrl = "https://vpn.grangy.ru/sub/" + path;
         }
 
         if (oldUrl === newUrl) {
