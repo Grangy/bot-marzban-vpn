@@ -95,7 +95,8 @@ async function updateUserInboundsByUsername(username, userData) {
     };
 
     // Отправляем обновление
-    const putResponse = await fetch(`${MARZBAN_API_URL}/users/${username}`, {
+    // Для PUT используется /user/ (единственное число), для GET списка - /users/
+    const putResponse = await fetch(`${MARZBAN_API_URL}/user/${username}`, {
       method: "PUT",
       headers,
       body: JSON.stringify(updateData),
