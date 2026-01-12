@@ -30,21 +30,15 @@ const NOTIFICATION_TEXT = `🔄 Обновите подписку в прило�
 
 async function sendHappUpdateNotification() {
   try {
-    console.log("🔍 Поиск активных подписок...");
+    console.log("🔍 Поиск всех платных подписок...");
 
-    const now = new Date();
-
-    // Находим все активные платные подписки
-    // Активная подписка: type != FREE и (endDate == null или endDate > now)
+    // Находим все платные подписки (не только активные)
+    // Платная подписка: type != FREE (независимо от endDate)
     const activeSubscriptions = await prisma.subscription.findMany({
       where: {
         type: {
           not: SubscriptionType.FREE,
         },
-        OR: [
-          { endDate: null },
-          { endDate: { gt: now } },
-        ],
       },
       include: {
         user: {
@@ -61,10 +55,10 @@ async function sendHappUpdateNotification() {
       },
     });
 
-    console.log(`📊 Найдено активных подписок: ${activeSubscriptions.length}`);
+    console.log(`📊 Найдено платных подписок: ${activeSubscriptions.length}`);
 
     if (activeSubscriptions.length === 0) {
-      console.log("✅ Нет активных подписок для рассылки");
+      console.log("✅ Нет платных подписок для рассылки");
       return;
     }
 
@@ -122,7 +116,7 @@ async function sendHappUpdateNotification() {
     console.log(`   ✅ Отправлено: ${sent}`);
     console.log(`   ⚠️  Пропущено: ${skipped}`);
     console.log(`   ❌ Ошибок: ${errors}`);
-    console.log(`   📊 Всего активных подписок: ${activeSubscriptions.length}`);
+    console.log(`   📊 Всего платных подписок: ${activeSubscriptions.length}`);
     console.log(`   👥 Уникальных получателей: ${sentToUsers.size}`);
 
     if (errors === 0) {
@@ -141,19 +135,13 @@ async function sendHappUpdateNotification() {
 // Функция для проверки (dry-run режим)
 async function checkHappUpdateNotification() {
   try {
-    console.log("🔍 Проверка: поиск активных подписок...");
-
-    const now = new Date();
+    console.log("🔍 Проверка: поиск всех платных подписок...");
 
     const activeSubscriptions = await prisma.subscription.findMany({
       where: {
         type: {
           not: SubscriptionType.FREE,
         },
-        OR: [
-          { endDate: null },
-          { endDate: { gt: now } },
-        ],
       },
       include: {
         user: {
@@ -170,10 +158,10 @@ async function checkHappUpdateNotification() {
       },
     });
 
-    console.log(`📊 Найдено активных подписок: ${activeSubscriptions.length}\n`);
+    console.log(`📊 Найдено платных подписок: ${activeSubscriptions.length}\n`);
 
     if (activeSubscriptions.length === 0) {
-      console.log("✅ Нет активных подписок для рассылки");
+      console.log("✅ Нет платных подписок для рассылки");
       return;
     }
 
@@ -192,7 +180,7 @@ async function checkHappUpdateNotification() {
     }
 
     console.log("📋 Статистика:");
-    console.log(`   👥 Уникальных пользователей с активными подписками: ${uniqueUsers.size}`);
+    console.log(`   👥 Уникальных пользователей с платными подписками: ${uniqueUsers.size}`);
     console.log(`   ✅ Пользователей с chatId: ${withChatId}`);
     console.log(`   ⚠️  Пользователей без chatId: ${withoutChatId}`);
     console.log(`\n📝 Пример сообщения, которое будет отправлено:\n`);
