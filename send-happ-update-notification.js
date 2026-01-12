@@ -5,6 +5,8 @@ const { Telegraf } = require("telegraf");
 const { prisma } = require("./db");
 const { SubscriptionType } = require("@prisma/client");
 const { Markup } = require("telegraf");
+const fs = require("fs");
+const path = require("path");
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
@@ -22,11 +24,15 @@ const NOTIFICATION_TEXT = `🔄 Обновите подписку в прило�
 
 📱 Чтобы получить доступ к новым серверам, нажмите кнопку "Обновить" в приложении Happ и обновите вашу подписку.
 
+⚠️ Если у вас еще не установлено приложение Happ, мы рекомендуем сменить приложение и добавить вашу подписку снова из раздела "Подписки".
+
 🔓 Теперь вы сможете использовать VPN даже на мобильных операторах, которые блокируют VPN-сервисы.
 
 ⚡ Не упустите возможность улучшить качество соединения!
 
 💡 Если у вас возникнут вопросы, обращайтесь в поддержку: @grangym`;
+
+const IMAGE_PATH = path.join(__dirname, "instruction.png");
 
 async function sendHappUpdateNotification() {
   try {
@@ -91,12 +97,27 @@ async function sendHappUpdateNotification() {
 
         console.log(`📤 Отправка сообщения пользователю ${user.telegramId} (chatId: ${chatId})...`);
 
-        // Отправляем сообщение
-        await bot.telegram.sendMessage(chatId, NOTIFICATION_TEXT, keyboard);
+        // Отправляем изображение с текстом, если файл существует
+        if (fs.existsSync(IMAGE_PATH)) {
+          try {
+            await bot.telegram.sendPhoto(chatId, { source: IMAGE_PATH }, {
+              caption: NOTIFICATION_TEXT
+            });
+            console.log(`✅ Сообщение с изображением отправлено пользователю ${user.telegramId}`);
+          } catch (photoError) {
+            // Если не удалось отправить фото, отправляем текстовое сообщение
+            console.log(`⚠️  Ошибка отправки изображения, отправляем текстовое сообщение: ${photoError.message}`);
+            await bot.telegram.sendMessage(chatId, NOTIFICATION_TEXT, keyboard);
+            console.log(`✅ Текстовое сообщение отправлено пользователю ${user.telegramId}`);
+          }
+        } else {
+          // Если файла изображения нет, отправляем только текст
+          await bot.telegram.sendMessage(chatId, NOTIFICATION_TEXT, keyboard);
+          console.log(`✅ Сообщение отправлено пользователю ${user.telegramId} (изображение не найдено)`);
+        }
         
         sentToUsers.add(user.id);
         sent++;
-        console.log(`✅ Сообщение отправлено пользователю ${user.telegramId}`);
 
         // Небольшая задержка чтобы не превысить лимиты API Telegram
         await new Promise((resolve) => setTimeout(resolve, 50));
