@@ -264,12 +264,16 @@ bot.action("balance_refresh", async (ctx) => {
 
       const apiResponse = await fetch(`${MARZBAN_API_URL}/users`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        ...(process.env.MARZBAN_TOKEN ? { "Authorization": `Bearer ${process.env.MARZBAN_TOKEN}` } : {})
+      },
       body: JSON.stringify({
           username, // 🔥 теперь имя = telegramId_срок_idПодписки
           status: "active",
           expire,
           proxies: { vless: {} },
+          inbounds: { vless: ["VLESS TCP REALITY", "VLESS-TCP-REALITY-VISION"] },
           note: `Telegram user ${ctx.dbUser.accountName || ctx.dbUser.telegramId}`,
       }),
       });

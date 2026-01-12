@@ -34,6 +34,7 @@ async function createMarzbanUser(telegramId, subscriptionId) {
         flow: "xtls-rprx-vision"
       }
     },
+    inbounds: { vless: ["VLESS TCP REALITY", "VLESS-TCP-REALITY-VISION"] },
     expire: expire,
     data_limit: 0, // без ограничений
     data_limit_reset_strategy: "no_reset"
