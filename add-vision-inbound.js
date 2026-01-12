@@ -86,11 +86,10 @@ async function updateUserInboundsByUsername(username, userData) {
   }
 
   try {
+    // Согласно документации Marzban API, можно отправлять только inbounds поле
     // Обновляем inbounds - добавляем оба inbounds для vless
-    const updatedUserData = {
-      ...userData,
+    const updateData = {
       inbounds: {
-        ...userData.inbounds,
         vless: ["VLESS TCP REALITY", "VLESS-TCP-REALITY-VISION"]
       }
     };
@@ -99,12 +98,18 @@ async function updateUserInboundsByUsername(username, userData) {
     const putResponse = await fetch(`${MARZBAN_API_URL}/users/${username}`, {
       method: "PUT",
       headers,
-      body: JSON.stringify(updatedUserData),
+      body: JSON.stringify(updateData),
     });
 
     if (!putResponse.ok) {
       const errorText = await putResponse.text();
-      return { success: false, reason: "UPDATE_ERROR", error: errorText };
+      const statusCode = putResponse.status;
+      return { 
+        success: false, 
+        reason: "UPDATE_ERROR", 
+        error: errorText,
+        statusCode: statusCode
+      };
     }
 
     return { success: true };
@@ -198,6 +203,12 @@ async function addVisionInbound() {
             updated++;
           } else {
             console.log(`❌ Ошибка при обновлении ${marzbanUser.username}: ${result.reason}`);
+            if (result.statusCode) {
+              console.log(`   HTTP статус: ${result.statusCode} ${result.statusText || ''}`);
+            }
+            if (result.error) {
+              console.log(`   Детали ошибки: ${result.error}`);
+            }
             errors++;
           }
 
