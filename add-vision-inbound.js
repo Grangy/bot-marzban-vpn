@@ -16,10 +16,64 @@ function getUsername(user, subscription) {
   return `${user.telegramId}_${subscription.type}_${subscription.id}`;
 }
 
+// Функция для извлечения telegramId из note или username пользователя Marzban
+function extractTelegramId(marzbanUser) {
+  // Пробуем извлечь из note: "Telegram user @username" или "Telegram user 123456789"
+  if (marzbanUser.note) {
+    const noteMatch = marzbanUser.note.match(/Telegram user\s+(@?\w+|\d+)/);
+    if (noteMatch) {
+      const idOrUsername = noteMatch[1];
+      // Если это не начинается с @, то это может быть telegramId
+      if (!idOrUsername.startsWith('@') && /^\d+$/.test(idOrUsername)) {
+        return idOrUsername;
+      }
+    }
+  }
+  
+  // Пробуем извлечь из username: "123456789_TYPE_ID" или "123456789_PROMO_ID"
+  if (marzbanUser.username) {
+    const usernameMatch = marzbanUser.username.match(/^(\d+)_/);
+    if (usernameMatch) {
+      return usernameMatch[1];
+    }
+  }
+  
+  return null;
+}
+
+// Функция для получения всех пользователей из Marzban
+async function getAllMarzbanUsers() {
+  const headers = {
+    "Content-Type": "application/json",
+  };
+  
+  if (MARZBAN_TOKEN) {
+    headers["Authorization"] = `Bearer ${MARZBAN_TOKEN}`;
+  }
+
+  try {
+    // Получаем всех пользователей (большой лимит)
+    const response = await fetch(`${MARZBAN_API_URL}/users?limit=10000`, {
+      method: "GET",
+      headers,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Ошибка при получении пользователей: ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data.users || data || [];
+  } catch (error) {
+    console.error("❌ Ошибка при получении пользователей из Marzban:", error.message);
+    throw error;
+  }
+}
+
 // Функция для обновления inbounds пользователя в Marzban
-async function updateUserInbounds(username) {
+async function updateUserInboundsByUsername(username, userData) {
   if (!MARZBAN_API_URL || MARZBAN_API_URL === "your_marzban_api_url") {
-    console.log(`⚠️  MARZBAN_API_URL не настроен, пропускаем пользователя ${username}`);
     return { success: false, reason: "API_NOT_CONFIGURED" };
   }
 
@@ -32,23 +86,6 @@ async function updateUserInbounds(username) {
   }
 
   try {
-    // Сначала получаем текущие данные пользователя
-    const getResponse = await fetch(`${MARZBAN_API_URL}/users/${username}`, {
-      method: "GET",
-      headers,
-    });
-
-    if (!getResponse.ok) {
-      if (getResponse.status === 404) {
-        return { success: false, reason: "USER_NOT_FOUND" };
-      }
-      const errorText = await getResponse.text();
-      console.error(`❌ Ошибка при получении пользователя ${username}:`, errorText);
-      return { success: false, reason: "GET_ERROR", error: errorText };
-    }
-
-    const userData = await getResponse.json();
-
     // Обновляем inbounds - добавляем оба inbounds для vless
     const updatedUserData = {
       ...userData,
@@ -67,22 +104,44 @@ async function updateUserInbounds(username) {
 
     if (!putResponse.ok) {
       const errorText = await putResponse.text();
-      console.error(`❌ Ошибка при обновлении пользователя ${username}:`, errorText);
       return { success: false, reason: "UPDATE_ERROR", error: errorText };
     }
 
     return { success: true };
   } catch (error) {
-    console.error(`❌ Исключение при обновлении пользователя ${username}:`, error.message);
     return { success: false, reason: "EXCEPTION", error: error.message };
   }
 }
 
 async function addVisionInbound() {
   try {
-    console.log("🔍 Поиск подписок с subscriptionUrl...");
+    console.log("🔍 Получение всех пользователей из Marzban...");
+
+    if (!MARZBAN_API_URL || MARZBAN_API_URL === "your_marzban_api_url") {
+      console.log("⚠️  MARZBAN_API_URL не настроен.");
+      return;
+    }
+
+    // Получаем всех пользователей из Marzban
+    const marzbanUsers = await getAllMarzbanUsers();
+    console.log(`📊 Получено пользователей из Marzban: ${marzbanUsers.length}`);
+
+    // Создаем карту: telegramId -> список пользователей Marzban
+    const telegramIdToMarzbanUsers = new Map();
+    for (const marzbanUser of marzbanUsers) {
+      const telegramId = extractTelegramId(marzbanUser);
+      if (telegramId) {
+        if (!telegramIdToMarzbanUsers.has(telegramId)) {
+          telegramIdToMarzbanUsers.set(telegramId, []);
+        }
+        telegramIdToMarzbanUsers.get(telegramId).push(marzbanUser);
+      }
+    }
+
+    console.log(`📊 Найдено уникальных telegramId в Marzban: ${telegramIdToMarzbanUsers.size}`);
 
     // Находим все подписки с subscriptionUrl (не NULL)
+    console.log("\n🔍 Поиск подписок в БД...");
     const subscriptions = await prisma.subscription.findMany({
       where: {
         subscriptionUrl: {
@@ -97,51 +156,54 @@ async function addVisionInbound() {
       },
     });
 
-    console.log(`📊 Найдено подписок для обновления: ${subscriptions.length}`);
+    console.log(`📊 Найдено подписок в БД: ${subscriptions.length}`);
 
     if (subscriptions.length === 0) {
       console.log("✅ Нет подписок для обновления");
       return;
     }
 
-    if (!MARZBAN_API_URL || MARZBAN_API_URL === "your_marzban_api_url") {
-      console.log("⚠️  MARZBAN_API_URL не настроен. Проверка будет пропущена.");
-      console.log("📝 Будут показаны только username'ы, которые нужно обновить:");
-      subscriptions.forEach((sub) => {
-        const username = getUsername(sub.user, sub);
-        console.log(`   - ${username} (подписка ${sub.id}, тип ${sub.type})`);
-      });
-      return;
-    }
-
     let updated = 0;
     let errors = 0;
     let notFound = 0;
-    let skipped = 0;
 
+    // Обрабатываем каждую подписку
     for (const sub of subscriptions) {
       try {
-        const username = getUsername(sub.user, sub);
-        console.log(`\n🔄 Обработка подписки ${sub.id}: ${username}`);
+        const telegramId = sub.user.telegramId;
+        const marzbanUsersForTelegramId = telegramIdToMarzbanUsers.get(telegramId) || [];
 
-        const result = await updateUserInbounds(username);
-
-        if (result.success) {
-          console.log(`✅ Пользователь ${username} обновлен успешно`);
-          updated++;
-        } else if (result.reason === "USER_NOT_FOUND") {
-          console.log(`⚠️  Пользователь ${username} не найден в Marzban`);
+        if (marzbanUsersForTelegramId.length === 0) {
+          console.log(`⚠️  Подписка ${sub.id}: пользователь с telegramId ${telegramId} не найден в Marzban`);
           notFound++;
-        } else if (result.reason === "API_NOT_CONFIGURED") {
-          console.log(`⚠️  API не настроен, пропуск`);
-          skipped++;
-        } else {
-          console.log(`❌ Ошибка при обновлении ${username}: ${result.reason}`);
-          errors++;
+          continue;
         }
 
-        // Небольшая задержка чтобы не перегружать API
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        // Обновляем всех пользователей Marzban для этого telegramId
+        for (const marzbanUser of marzbanUsersForTelegramId) {
+          const currentInbounds = marzbanUser.inbounds?.vless || [];
+          const hasVision = currentInbounds.includes("VLESS-TCP-REALITY-VISION");
+
+          if (hasVision) {
+            console.log(`✓ Подписка ${sub.id}: пользователь ${marzbanUser.username} уже имеет VLESS-TCP-REALITY-VISION`);
+            continue;
+          }
+
+          console.log(`🔄 Подписка ${sub.id}: обновление пользователя ${marzbanUser.username} (telegramId: ${telegramId})`);
+
+          const result = await updateUserInboundsByUsername(marzbanUser.username, marzbanUser);
+
+          if (result.success) {
+            console.log(`✅ Пользователь ${marzbanUser.username} обновлен успешно`);
+            updated++;
+          } else {
+            console.log(`❌ Ошибка при обновлении ${marzbanUser.username}: ${result.reason}`);
+            errors++;
+          }
+
+          // Небольшая задержка чтобы не перегружать API
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
       } catch (error) {
         console.error(`❌ Исключение при обработке подписки ${sub.id}:`, error.message);
         errors++;
@@ -149,16 +211,15 @@ async function addVisionInbound() {
     }
 
     console.log("\n📈 Итоги миграции:");
-    console.log(`   ✅ Обновлено: ${updated}`);
-    console.log(`   ⚠️  Не найдено в Marzban: ${notFound}`);
-    console.log(`   ⚠️  Пропущено: ${skipped}`);
+    console.log(`   ✅ Обновлено пользователей: ${updated}`);
+    console.log(`   ⚠️  Не найдено telegramId в Marzban: ${notFound}`);
     console.log(`   ❌ Ошибок: ${errors}`);
-    console.log(`   📊 Всего обработано: ${subscriptions.length}`);
+    console.log(`   📊 Всего обработано подписок: ${subscriptions.length}`);
 
     if (errors === 0 && notFound === 0) {
       console.log("\n✅ Миграция завершена успешно!");
     } else if (errors === 0) {
-      console.log("\n✅ Миграция завершена (некоторые пользователи не найдены в Marzban, это нормально)");
+      console.log("\n✅ Миграция завершена (некоторые пользователи не найдены в Marzban)");
     } else {
       console.log(`\n⚠️  Миграция завершена с ${errors} ошибками`);
     }
@@ -173,8 +234,33 @@ async function addVisionInbound() {
 // Функция для проверки (dry-run режим)
 async function checkVisionInbound() {
   try {
-    console.log("🔍 Проверка: поиск подписок для обновления...");
+    console.log("🔍 Проверка: получение всех пользователей из Marzban...");
 
+    if (!MARZBAN_API_URL || MARZBAN_API_URL === "your_marzban_api_url") {
+      console.log("⚠️  MARZBAN_API_URL не настроен. Режим проверки недоступен.");
+      return;
+    }
+
+    // Получаем всех пользователей из Marzban
+    const marzbanUsers = await getAllMarzbanUsers();
+    console.log(`📊 Получено пользователей из Marzban: ${marzbanUsers.length}`);
+
+    // Создаем карту: telegramId -> список пользователей Marzban
+    const telegramIdToMarzbanUsers = new Map();
+    for (const marzbanUser of marzbanUsers) {
+      const telegramId = extractTelegramId(marzbanUser);
+      if (telegramId) {
+        if (!telegramIdToMarzbanUsers.has(telegramId)) {
+          telegramIdToMarzbanUsers.set(telegramId, []);
+        }
+        telegramIdToMarzbanUsers.get(telegramId).push(marzbanUser);
+      }
+    }
+
+    console.log(`📊 Найдено уникальных telegramId в Marzban: ${telegramIdToMarzbanUsers.size}`);
+
+    // Находим все подписки с subscriptionUrl (не NULL)
+    console.log("\n🔍 Поиск подписок в БД...");
     const subscriptions = await prisma.subscription.findMany({
       where: {
         subscriptionUrl: {
@@ -189,74 +275,54 @@ async function checkVisionInbound() {
       },
     });
 
-    console.log(`📊 Найдено подписок: ${subscriptions.length}\n`);
+    console.log(`📊 Найдено подписок в БД: ${subscriptions.length}\n`);
 
     if (subscriptions.length === 0) {
-      console.log("✅ Нет подписок для обновления");
+      console.log("✅ Нет подписок для проверки");
       return;
-    }
-
-    if (!MARZBAN_API_URL || MARZBAN_API_URL === "your_marzban_api_url") {
-      console.log("⚠️  MARZBAN_API_URL не настроен. Режим проверки недоступен.");
-      console.log("📝 Найденные подписки:");
-      subscriptions.forEach((sub) => {
-        const username = getUsername(sub.user, sub);
-        console.log(`   - ${username} (подписка ${sub.id}, тип ${sub.type})`);
-      });
-      return;
-    }
-
-    const headers = {
-      "Content-Type": "application/json",
-    };
-    
-    if (MARZBAN_TOKEN) {
-      headers["Authorization"] = `Bearer ${MARZBAN_TOKEN}`;
     }
 
     let found = 0;
     let notFound = 0;
-    let errors = 0;
+    let needsUpdate = 0;
+    let alreadyHasVision = 0;
 
+    // Проверяем каждую подписку
     for (const sub of subscriptions) {
       try {
-        const username = getUsername(sub.user, sub);
-        const getResponse = await fetch(`${MARZBAN_API_URL}/users/${username}`, {
-          method: "GET",
-          headers,
-        });
+        const telegramId = sub.user.telegramId;
+        const marzbanUsersForTelegramId = telegramIdToMarzbanUsers.get(telegramId) || [];
 
-        if (getResponse.ok) {
-          const userData = await getResponse.json();
-          const currentInbounds = userData.inbounds?.vless || [];
+        if (marzbanUsersForTelegramId.length === 0) {
+          console.log(`⚠️  Подписка ${sub.id}: telegramId ${telegramId} не найден в Marzban`);
+          notFound++;
+          continue;
+        }
+
+        found++;
+        // Проверяем всех пользователей Marzban для этого telegramId
+        for (const marzbanUser of marzbanUsersForTelegramId) {
+          const currentInbounds = marzbanUser.inbounds?.vless || [];
           const hasVision = currentInbounds.includes("VLESS-TCP-REALITY-VISION");
           
           if (hasVision) {
-            console.log(`✅ ${username}: уже имеет VLESS-TCP-REALITY-VISION`);
+            console.log(`✅ Подписка ${sub.id}: ${marzbanUser.username} уже имеет VLESS-TCP-REALITY-VISION`);
+            alreadyHasVision++;
           } else {
-            console.log(`⚠️  ${username}: НУЖНО ОБНОВИТЬ (текущие inbounds: ${JSON.stringify(currentInbounds)})`);
+            console.log(`⚠️  Подписка ${sub.id}: ${marzbanUser.username} НУЖНО ОБНОВИТЬ (текущие inbounds: ${JSON.stringify(currentInbounds)})`);
+            needsUpdate++;
           }
-          found++;
-        } else if (getResponse.status === 404) {
-          console.log(`⚠️  ${username}: не найден в Marzban`);
-          notFound++;
-        } else {
-          const errorText = await getResponse.text();
-          console.log(`❌ ${username}: ошибка проверки - ${errorText}`);
-          errors++;
         }
-
-        await new Promise((resolve) => setTimeout(resolve, 50));
       } catch (error) {
         console.error(`❌ Ошибка при проверке подписки ${sub.id}:`, error.message);
-        errors++;
       }
     }
 
     console.log("\n📈 Итоги проверки:");
-    console.log(`   ✅ Найдено в Marzban: ${found}`);
-    console.log(`   ⚠️  Не найдено: ${notFound}`);
-    console.log(`   ❌ Ошибок: ${errors}`);
+    console.log(`   ✅ Найдено telegramId в Marzban: ${found}`);
+    console.log(`   ✓ Уже имеют VLESS-TCP-REALITY-VISION: ${alreadyHasVision}`);
+    console.log(`   ⚠️  Нужно обновить: ${needsUpdate}`);
+    console.log(`   ⚠️  Не найдено telegramId в Marzban: ${notFound}`);
   } catch (error) {
     console.error("❌ Критическая ошибка при проверке:", error);
     throw error;
