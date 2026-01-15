@@ -94,7 +94,8 @@ function registerPromo(bot) {
       console.error("[PROMO] Error getting bot info:", e);
     }
 
-    const botLink = botUsername ? `https://t.me/${botUsername}` : "https://t.me/your_bot";
+    // Формируем ссылку на бота
+    const botLink = botUsername ? `https://t.me/${botUsername}` : "https://t.me/maxvpn_offbot";
 
     const msg =
 `🎁 Ваш промокод: \`${me.promoCode}\`
@@ -107,6 +108,7 @@ function registerPromo(bot) {
 💡 Вы сами можете активировать только ЧУЖОЙ промокод один раз.`;
 
     // Создаем информативное сообщение для пересылки
+    // Используем полную ссылку https://t.me/... для корректного распознавания как ссылки
     const shareMessage = `🎁 Промокод на VPN с обходом блокировок мобильной связи!
 
 🔑 Промокод: ${me.promoCode}
