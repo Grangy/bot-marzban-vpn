@@ -94,8 +94,8 @@ function registerPromo(bot) {
       console.error("[PROMO] Error getting bot info:", e);
     }
 
-    // Формируем ссылку на бота
-    const botLink = botUsername ? `https://t.me/${botUsername}` : "https://t.me/maxvpn_offbot";
+    // Формируем ссылку на бота в формате @username
+    const botLink = botUsername ? `@${botUsername}` : "@maxvpn_offbot";
 
     const msg =
 `🎁 Ваш промокод: \`${me.promoCode}\`
