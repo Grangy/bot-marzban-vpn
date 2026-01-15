@@ -9,9 +9,10 @@ const MARZBAN_API_URL = process.env.MARZBAN_API_URL;
 
 // Кросс-платформенная функция для создания ссылки поделиться (работает на компе и мобильном)
 function shareLink(text) {
-  // Используем https://t.me/share/url для работы на всех платформах (компьютер, мобильный, веб)
+  // Для отправки текста используем формат с пустым url параметром
+  // Это работает на всех платформах (компьютер, мобильный, веб)
   const base = "https://t.me/share/url";
-  return `${base}?text=${encodeURIComponent(text)}`;
+  return `${base}?url=&text=${encodeURIComponent(text)}`;
 }
 
 // Функция для создания пользователя в Marzban API
