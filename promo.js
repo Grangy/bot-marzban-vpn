@@ -23,7 +23,7 @@ async function createMarzbanUser(telegramId, subscriptionId) {
   }
 
   const username = `${telegramId}_PROMO_${subscriptionId}`;
-  const expireSeconds = 10 * 24 * 60 * 60; // 10 дней в секундах
+  const expireSeconds = 3 * 24 * 60 * 60; // 3 дня в секундах
   const expire = Math.floor(Date.now() / 1000) + expireSeconds;
 
   const userData = {
@@ -85,12 +85,12 @@ function registerPromo(bot) {
 `🎁 Ваш промокод: \`${me.promoCode}\`
 Активаций: ${activations}
 
-Подарок: любой пользователь, который введёт ваш код, получит VPN на 10 дней. 
+Подарок: любой пользователь, который введёт ваш код, получит VPN на 3 дня. 
 Вы сами можете активировать только ЧУЖОЙ код один раз (команда ниже).`;
 
-    const shareText = `Мой промокод ${me.promoCode} — VPN на 10 дней`;
+    const shareText = `Мой промокод ${me.promoCode} — VPN на 3 дня`;
     const kb = Markup.inlineKeyboard([
-      [Markup.button.url("🔗 Поделиться кодом", shareLink(shareText))],
+      [Markup.button.url("🔗 Поделиться кодом", `tg://msg?text=${encodeURIComponent(shareText)}`)],
       [Markup.button.callback("🎁 Активировать чужой промокод", "promo_activate")],
       [Markup.button.callback("⬅️ Назад", "back")],
     ]);
@@ -148,9 +148,9 @@ function registerPromo(bot) {
           },
         });
 
-        // создаём подписку на 10 дней
+        // создаём подписку на 3 дня
         const endDate = new Date();
-        endDate.setDate(endDate.getDate() + 10);
+        endDate.setDate(endDate.getDate() + 3);
         
         const sub = await tx.subscription.create({
           data: {
@@ -197,7 +197,7 @@ function registerPromo(bot) {
       }
 
       // показываем успешную активацию с ссылкой на VPN
-      return ctx.reply(`✅ Промокод применён! Вы получили VPN на 10 дней.\n\n🔗 Ссылка на подписку: ${subscriptionUrl}\n\nСкопируйте ссылку и настройте VPN в своём приложении.`);
+      return ctx.reply(`✅ Промокод применён! Вы получили VPN на 3 дня.\n\n🔗 Ссылка на подписку: ${subscriptionUrl}\n\nСкопируйте ссылку и настройте VPN в своём приложении.`);
     } catch (e) {
       console.error("[PROMO] error:", e);
       return ctx.reply("Ошибка при активации промокода. Попробуйте позже.");

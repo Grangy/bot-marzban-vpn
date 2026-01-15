@@ -106,10 +106,13 @@ function mainMenu(balanceRub = 0) {
     ],
     [
       Markup.button.callback(`💼 Баланс: ${ruMoney(balanceRub)}`, "balance"),
-      Markup.button.callback("📋 Информация", "info")
+      Markup.button.callback("🎁 Промокод", "promo")
     ],
     [
       Markup.button.callback("📖 Инструкции", "instructions"),
+      Markup.button.callback("📋 Информация", "info")
+    ],
+    [
       Markup.button.url("🛠 Тех.поддержка", "https://t.me/grangym")
     ],
   ]);
