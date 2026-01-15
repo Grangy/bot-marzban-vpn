@@ -7,6 +7,110 @@ const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch
 
 const MARZBAN_API_URL = process.env.MARZBAN_API_URL;
 
+// Хранилище пользователей, ожидающих ввода промокода (chatId -> true)
+const waitingForPromoCode = new Set();
+
+// Функция для активации промокода (вынесена для переиспользования)
+async function activatePromoCode(ctx, inputCode) {
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const me = await tx.user.findUnique({ where: { id: ctx.dbUser.id } });
+
+      // код должен существовать
+      const owner = await tx.user.findUnique({
+        where: { promoCode: inputCode.toUpperCase() },
+      });
+      if (!owner) return { ok: false, reason: "NOT_FOUND" };
+
+      // нельзя активировать свой
+      if (owner.id === me.id) return { ok: false, reason: "SELF" };
+
+      // уже активировал раньше любой код?
+      const already = await tx.promoActivation.findUnique({
+        where: { activatorId: me.id },
+      });
+      if (already) return { ok: false, reason: "ALREADY" };
+
+      // создаём запись активации
+      await tx.promoActivation.create({
+        data: {
+          codeOwnerId: owner.id,
+          activatorId: me.id,
+          amount: 0, // больше не начисляем деньги
+        },
+      });
+
+      // создаём подписку на 3 дня
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + 3);
+      
+      const sub = await tx.subscription.create({
+        data: {
+          userId: me.id,
+          type: SubscriptionType.PROMO_10D,
+          startDate: new Date(),
+          endDate: endDate,
+        },
+      });
+
+      return { ok: true, owner, sub };
+    });
+
+    if (!result.ok) {
+      if (result.reason === "NOT_FOUND")
+        return { ok: false, message: "❌ Такой промокод не найден." };
+      if (result.reason === "SELF")
+        return { ok: false, message: "❌ Нельзя активировать свой промокод." };
+      if (result.reason === "ALREADY")
+        return { ok: false, message: "❌ Вы уже активировали промокод ранее." };
+      return { ok: false, message: "❌ Не удалось активировать промокод." };
+    }
+
+    // создаём VPN пользователя в Marzban и получаем ссылку
+    const subscriptionUrl = await createMarzbanUser(ctx.dbUser.telegramId, result.sub.id);
+    
+    // обновляем подписку с полученной ссылкой
+    await prisma.subscription.update({
+      where: { id: result.sub.id },
+      data: { subscriptionUrl }
+    });
+
+    // оповестим владельца кода (если возможен DM)
+    try {
+      const owner = result.owner;
+      if (owner.chatId) {
+        await ctx.telegram.sendMessage(
+          owner.chatId,
+          `🎉 Ваш промокод активирован пользователем ${ctx.dbUser.accountName || ctx.dbUser.telegramId}`
+        );
+      }
+    } catch (e) {
+      // молча игнорируем
+    }
+
+    // показываем успешную активацию с ссылкой на VPN
+    const successMessage = `✅ Промокод применён! Вы получили VPN на 3 дня с обходом блокировок мобильной связи.
+
+🔗 Ссылка на подписку: ${subscriptionUrl}
+
+📱 Как использовать:
+1. Скопируйте ссылку выше
+2. Откройте приложение Happ на вашем устройстве
+3. Нажмите "+" → "Import from URL"
+4. Вставьте ссылку и нажмите "Import"
+5. Включите VPN кнопкой "Connect"
+
+🔓 Теперь вы можете использовать VPN даже там, где оператор блокирует VPN-сервисы!
+
+💡 Если нужна помощь, смотрите инструкции в разделе "📖 Инструкции"`;
+
+    return { ok: true, message: successMessage };
+  } catch (e) {
+    console.error("[PROMO] error:", e);
+    return { ok: false, message: "Ошибка при активации промокода. Попробуйте позже." };
+  }
+}
+
 // Кросс-платформенная функция для создания ссылки поделиться (работает на компе и мобильном)
 function shareLink(text) {
   // Для отправки текста используем формат с пустым url параметром
@@ -75,9 +179,24 @@ async function createMarzbanUser(telegramId, subscriptionId) {
 }
 
 function registerPromo(bot) {
+  // Middleware для очистки состояния ожидания при нажатии других кнопок
+  // Должен быть зарегистрирован ПЕРВЫМ, чтобы очищать состояние до обработки
+  bot.use(async (ctx, next) => {
+    // Если это callback query и не "promo_activate", очищаем состояние
+    if (ctx.callbackQuery && ctx.callbackQuery.data !== "promo_activate" && !ctx.callbackQuery.data?.startsWith("promo_copy_")) {
+      const chatId = String(ctx.chat?.id || ctx.from?.id);
+      waitingForPromoCode.delete(chatId);
+    }
+    return next();
+  });
+
   // Экран промокода
   bot.action("promo", async (ctx) => {
     await ctx.answerCbQuery();
+    // Убираем пользователя из ожидающих промокод (если был)
+    const chatId = String(ctx.chat?.id || ctx.from?.id);
+    waitingForPromoCode.delete(chatId);
+    
     const me = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
 
     // Получаем статистику активаций
@@ -154,123 +273,101 @@ function registerPromo(bot) {
   // Подсказка по активации
   bot.action("promo_activate", async (ctx) => {
     await ctx.answerCbQuery();
+    // Добавляем пользователя в ожидающие промокод
+    const chatId = String(ctx.chat?.id || ctx.from?.id);
+    waitingForPromoCode.add(chatId);
+    
     const text =
-`✍️ Введите команду в чат:
-\`/promo ВАШ_КОД\`
+`✍️ Введите промокод в чат:
 
-Например: \`/promo A1B2C3D4\``;
+Вы можете ввести:
+• Просто промокод: \`010BA823\`
+• Или команду: \`/promo 010BA823\`
+
+Например: \`010BA823\` или \`A1B2C3D4\``;
     await ctx.replyWithMarkdown(text, promoMenu());
   });
 
+  // Обработчик текстовых сообщений для активации промокода (без команды)
+  // Должен быть зарегистрирован ПОСЛЕ других обработчиков (actions, commands)
+  // чтобы не мешать им
+  bot.on("text", async (ctx, next) => {
+    // Пропускаем команды (они обрабатываются отдельно через bot.command)
+    if (ctx.message?.text?.startsWith("/")) {
+      return next();
+    }
+
+    const chatId = String(ctx.chat?.id || ctx.from?.id);
+    
+    // Проверяем, ожидается ли промокод от этого пользователя
+    if (!waitingForPromoCode.has(chatId)) {
+      return next(); // Не ожидаем промокод, передаем дальше
+    }
+
+    const text = ctx.message?.text?.trim() || "";
+    
+    // Проверяем формат промокода: только A-Z0-9 и дефис, длина 4-32 символа
+    // Убираем пробелы для обработки вариантов типа "010BA823" или "010 BA 823"
+    const cleanText = text.replace(/\s+/g, "");
+    const promoMatch = cleanText.match(/^([A-Z0-9-]{4,32})$/i);
+    
+    if (!promoMatch) {
+      // Если текст не похож на промокод, удаляем из ожидания
+      waitingForPromoCode.delete(chatId);
+      return next();
+    }
+
+    // Удаляем пользователя из ожидающих
+    waitingForPromoCode.delete(chatId);
+
+    const inputCode = promoMatch[1].toUpperCase();
+
+    // Пытаемся активировать промокод
+    const result = await activatePromoCode(ctx, inputCode);
+
+    if (result.ok) {
+      await ctx.reply(result.message);
+      // Не вызываем next(), так как мы обработали сообщение
+    } else {
+      await ctx.reply(result.message);
+      // Предлагаем попробовать снова (если ошибка не критическая)
+      if (result.message.includes("не найден")) {
+        waitingForPromoCode.add(chatId);
+      }
+      // Не вызываем next(), так как мы обработали сообщение
+    }
+  });
+
+
   // Команда активации: /promo ABCD1234
   bot.command("promo", async (ctx) => {
+    // Удаляем пользователя из ожидающих (если был)
+    const chatId = String(ctx.chat?.id || ctx.from?.id);
+    waitingForPromoCode.delete(chatId);
+
     const raw = ctx.message?.text || "";
     const match = raw.trim().match(/^\/promo(?:@\w+)?\s+([A-Z0-9-]{4,32})$/i);
 
     if (!match) {
-      return ctx.reply("Укажите код: /promo ВАШ_КОД");
+      // Если команда без кода, добавляем в ожидающие
+      waitingForPromoCode.add(chatId);
+      return ctx.reply("✍️ Введите промокод:\n\nВы можете ввести:\n• Просто промокод: `010BA823`\n• Или команду: `/promo 010BA823`");
     }
 
     const inputCode = match[1].toUpperCase();
+    const result = await activatePromoCode(ctx, inputCode);
 
-    try {
-      const result = await prisma.$transaction(async (tx) => {
-        const me = await tx.user.findUnique({ where: { id: ctx.dbUser.id } });
-
-        // код должен существовать
-        const owner = await tx.user.findUnique({
-          where: { promoCode: inputCode },
-        });
-        if (!owner) return { ok: false, reason: "NOT_FOUND" };
-
-        // нельзя активировать свой
-        if (owner.id === me.id) return { ok: false, reason: "SELF" };
-
-        // уже активировал раньше любой код?
-        const already = await tx.promoActivation.findUnique({
-          where: { activatorId: me.id },
-        });
-        if (already) return { ok: false, reason: "ALREADY" };
-
-        // создаём запись активации
-        await tx.promoActivation.create({
-          data: {
-            codeOwnerId: owner.id,
-            activatorId: me.id,
-            amount: 0, // больше не начисляем деньги
-          },
-        });
-
-        // создаём подписку на 3 дня
-        const endDate = new Date();
-        endDate.setDate(endDate.getDate() + 3);
-        
-        const sub = await tx.subscription.create({
-          data: {
-            userId: me.id,
-            type: SubscriptionType.PROMO_10D,
-            startDate: new Date(),
-            endDate: endDate,
-          },
-        });
-
-        return { ok: true, owner, sub };
-      });
-
-      if (!result.ok) {
-        if (result.reason === "NOT_FOUND")
-          return ctx.reply("❌ Такой промокод не найден.");
-        if (result.reason === "SELF")
-          return ctx.reply("❌ Нельзя активировать свой промокод.");
-        if (result.reason === "ALREADY")
-          return ctx.reply("❌ Вы уже активировали промокод ранее.");
-        return ctx.reply("❌ Не удалось активировать промокод.");
-      }
-
-      // создаём VPN пользователя в Marzban и получаем ссылку
-      const subscriptionUrl = await createMarzbanUser(ctx.dbUser.telegramId, result.sub.id);
-      
-      // обновляем подписку с полученной ссылкой
-      await prisma.subscription.update({
-        where: { id: result.sub.id },
-        data: { subscriptionUrl }
-      });
-
-      // оповестим владельца кода (если возможен DM)
-      try {
-        const owner = result.owner;
-        if (owner.chatId) {
-          await ctx.telegram.sendMessage(
-            owner.chatId,
-            `🎉 Ваш промокод активирован пользователем ${ctx.dbUser.accountName || ctx.dbUser.telegramId}`
-          );
-        }
-      } catch (e) {
-        // молча игнорируем
-      }
-
-      // показываем успешную активацию с ссылкой на VPN
-      const successMessage = `✅ Промокод применён! Вы получили VPN на 3 дня с обходом блокировок мобильной связи.
-
-🔗 Ссылка на подписку: ${subscriptionUrl}
-
-📱 Как использовать:
-1. Скопируйте ссылку выше
-2. Откройте приложение Happ на вашем устройстве
-3. Нажмите "+" → "Import from URL"
-4. Вставьте ссылку и нажмите "Import"
-5. Включите VPN кнопкой "Connect"
-
-🔓 Теперь вы можете использовать VPN даже там, где оператор блокирует VPN-сервисы!
-
-💡 Если нужна помощь, смотрите инструкции в разделе "📖 Инструкции"`;
-
-      return ctx.reply(successMessage);
-    } catch (e) {
-      console.error("[PROMO] error:", e);
-      return ctx.reply("Ошибка при активации промокода. Попробуйте позже.");
+    if (result.ok) {
+      return ctx.reply(result.message);
+    } else {
+      return ctx.reply(result.message);
     }
   });
 }
 
-module.exports = { registerPromo };
+// Экспортируем функцию для очистки состояния ожидания (можно использовать из других модулей)
+function clearWaitingState(chatId) {
+  waitingForPromoCode.delete(String(chatId));
+}
+
+module.exports = { registerPromo, clearWaitingState };
