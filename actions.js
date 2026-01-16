@@ -797,7 +797,7 @@ return tx.subscription.update({
     // Кнопки для инструкции
     const buttons = [
       [Markup.button.callback("✅ Я настроил VPN", `setup_complete_${subscriptionId}`)],
-      [Markup.button.callback("📖 Инструкции", "instructions")],
+      [Markup.button.callback("📹 Видео-инструкция", `setup_video_${subscriptionId}`)],
       [Markup.button.callback("⬅️ В меню", "back")]
     ];
 
@@ -805,6 +805,42 @@ return tx.subscription.update({
 
     // Сохраняем состояние
     setupStates.set(chatId, { subscriptionId, step: 'instructions', device, subscriptionUrl });
+  });
+
+  // Обработчик для кнопки "Видео-инструкция" на этапе настройки
+  bot.action(/^setup_video_(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const subscriptionId = parseInt(ctx.match[1], 10);
+
+    // Проверяем подписку
+    const sub = await prisma.subscription.findUnique({ where: { id: subscriptionId } });
+    if (!sub || sub.userId !== ctx.dbUser.id) {
+      return ctx.reply("Подписка не найдена.");
+    }
+
+    // Проверяем существование файла видео
+    if (!fs.existsSync('video.mp4')) {
+      console.warn("Video file video.mp4 not found");
+      await ctx.reply("❌ Видео-файл не найден на сервере. Используйте текстовые инструкции.");
+      return;
+    }
+
+    try {
+      // Отправляем видео с инструкцией
+      await ctx.sendVideo(
+        { source: 'video.mp4' },
+        {
+          caption: "📹 Видео-инструкция по настройке VPN\n\nСмотрите подробное видео по подключению к VPN сервису.",
+          reply_markup: Markup.inlineKeyboard([
+            [Markup.button.callback("✅ Я настроил VPN", `setup_complete_${subscriptionId}`)],
+            [Markup.button.callback("⬅️ В меню", "back")]
+          ]).reply_markup
+        }
+      );
+    } catch (e) {
+      console.error("Error sending video:", e);
+      await ctx.reply("❌ Ошибка отправки видео. Используйте текстовые инструкции выше.");
+    }
   });
 
 
