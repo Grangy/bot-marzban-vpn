@@ -23,7 +23,7 @@
     instructionsMenu,
   } = require("./menus");
   const MARZBAN_API_URL = process.env.MARZBAN_API_URL;
-  const { createMarzbanUserOnBothServers } = require("./marzban-utils");
+  const { createMarzbanUserOnBothServers, extendMarzbanUserOnBothServers } = require("./marzban-utils");
 
 
   /* Утилита: безопасное редактирование сообщения */
@@ -588,21 +588,24 @@ return tx.subscription.update({
 
       });
 
-      // 🔥 вызов Marzban API extend
-      try {
-        const username = `${ctx.dbUser.telegramId}_${sub.type}_${sub.id}`;
-        const days = plan.months * 30;
+      // 🔥 продление на обоих Marzban серверах (если есть ссылки)
+      if (sub.subscriptionUrl || sub.subscriptionUrl2) {
+        try {
+          const username = `${ctx.dbUser.telegramId}_${sub.type}_${sub.id}`;
+          const days = plan.months * 30;
 
-        const apiResponse = await fetch(
-          `${MARZBAN_API_URL}/users/${username}/extend?days=${days}`,
-          { method: "POST" }
-        );
-
-        if (!apiResponse.ok) {
-          console.error("Marzban extend error:", await apiResponse.text());
+          // Продлеваем на обоих серверах
+          const extendResults = await extendMarzbanUserOnBothServers(username, days);
+          
+          if (!extendResults.success1 && sub.subscriptionUrl) {
+            console.warn(`[Extend] Failed to extend on primary server for ${username}`);
+          }
+          if (!extendResults.success2 && sub.subscriptionUrl2) {
+            console.warn(`[Extend] Failed to extend on secondary server for ${username}`);
+          }
+        } catch (err) {
+          console.error("Ошибка при продлении на Marzban серверах:", err);
         }
-      } catch (err) {
-        console.error("Ошибка при вызове extend:", err);
       }
 
       const newBalance = user.balance - plan.price;

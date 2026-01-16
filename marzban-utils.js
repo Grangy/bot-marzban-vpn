@@ -107,8 +107,71 @@ async function createMarzbanUserOnBothServers(userData) {
   return results;
 }
 
+/**
+ * Продлевает подписку пользователя на обоих Marzban серверах
+ * @param {string} username - Имя пользователя в Marzban
+ * @param {number} days - Количество дней для продления
+ * @returns {Promise<{success1: boolean, success2: boolean}>} - Результаты продления на каждом сервере
+ */
+async function extendMarzbanUserOnBothServers(username, days) {
+  const results = { success1: false, success2: false };
+
+  // Продление на основном сервере
+  if (MARZBAN_API_URL && MARZBAN_API_URL !== "your_marzban_api_url") {
+    try {
+      const response = await fetch(
+        `${MARZBAN_API_URL}/users/${username}/extend?days=${days}`,
+        {
+          method: "POST",
+          headers: {
+            ...(MARZBAN_TOKEN ? { "Authorization": `Bearer ${MARZBAN_TOKEN}` } : {})
+          }
+        }
+      );
+
+      if (response.ok) {
+        results.success1 = true;
+        console.log(`[Marzban] User ${username} extended successfully on primary server`);
+      } else {
+        const errorText = await response.text();
+        console.error(`[Marzban] Failed to extend user on primary server:`, errorText);
+      }
+    } catch (error) {
+      console.error(`[Marzban] Error extending user on primary server:`, error);
+    }
+  }
+
+  // Продление на втором сервере
+  if (MARZBAN_API_URL_2) {
+    try {
+      const response = await fetch(
+        `${MARZBAN_API_URL_2}/users/${username}/extend?days=${days}`,
+        {
+          method: "POST",
+          headers: {
+            ...(MARZBAN_TOKEN_2 ? { "Authorization": `Bearer ${MARZBAN_TOKEN_2}` } : {})
+          }
+        }
+      );
+
+      if (response.ok) {
+        results.success2 = true;
+        console.log(`[Marzban] User ${username} extended successfully on secondary server`);
+      } else {
+        const errorText = await response.text();
+        console.error(`[Marzban] Failed to extend user on secondary server:`, errorText);
+      }
+    } catch (error) {
+      console.error(`[Marzban] Error extending user on secondary server:`, error);
+    }
+  }
+
+  return results;
+}
+
 module.exports = {
   createMarzbanUserOnBothServers,
   createUserOnMarzbanServer,
-  convertToRus2Url
+  convertToRus2Url,
+  extendMarzbanUserOnBothServers
 };
