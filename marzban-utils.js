@@ -64,31 +64,42 @@ async function createUserOnMarzbanServer(apiUrl, token, userData) {
 
 /**
  * Создает пользователя на обоих Marzban серверах
+ * На основном сервере: оба inbounds (VLESS TCP REALITY и VLESS-TCP-REALITY-VISION)
+ * На втором сервере: только VLESS TCP REALITY (так как VLESS-TCP-REALITY-VISION не существует)
  * @param {object} userData - Данные пользователя
  * @param {string} userData.username - Имя пользователя
  * @param {number} userData.expire - Unix timestamp истечения
  * @param {object} userData.proxies - Настройки прокси
- * @param {object} userData.inbounds - Настройки inbounds
+ * @param {object} userData.inbounds - Настройки inbounds для основного сервера
  * @param {string} userData.note - Примечание
  * @returns {Promise<{url1: string|null, url2: string|null}>} - Обе ссылки подписки
  */
 async function createMarzbanUserOnBothServers(userData) {
   const results = { url1: null, url2: null };
 
+  // Подготовим данные для основного сервера (с исходными inbounds)
+  const userDataPrimary = { ...userData };
+
+  // Подготовим данные для второго сервера (только VLESS TCP REALITY)
+  const userDataSecondary = { 
+    ...userData,
+    inbounds: { vless: ["VLESS TCP REALITY"] } // Только этот inbound существует на втором сервере
+  };
+
   // Проверяем, настроен ли основной API
   if (!MARZBAN_API_URL || MARZBAN_API_URL === "your_marzban_api_url") {
     console.log("[Marzban] Primary API not configured, skipping");
     results.url1 = `https://fake-vpn.local/subscription/${userData.username}`;
   } else {
-    // Создаем на основном сервере
-    results.url1 = await createUserOnMarzbanServer(MARZBAN_API_URL, MARZBAN_TOKEN, userData);
+    // Создаем на основном сервере с обоими inbounds
+    results.url1 = await createUserOnMarzbanServer(MARZBAN_API_URL, MARZBAN_TOKEN, userDataPrimary);
   }
 
-  // Создаем на втором сервере (rus2)
+  // Создаем на втором сервере (rus2) только с VLESS TCP REALITY
   if (!MARZBAN_API_URL_2) {
     console.log("[Marzban] Secondary API not configured, skipping");
   } else {
-    const url2Raw = await createUserOnMarzbanServer(MARZBAN_API_URL_2, MARZBAN_TOKEN_2, userData);
+    const url2Raw = await createUserOnMarzbanServer(MARZBAN_API_URL_2, MARZBAN_TOKEN_2, userDataSecondary);
     // Преобразуем ссылку для rus2 сервера
     results.url2 = convertToRus2Url(url2Raw) || url2Raw;
   }
