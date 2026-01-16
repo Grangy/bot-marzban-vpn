@@ -25,6 +25,9 @@
   const MARZBAN_API_URL = process.env.MARZBAN_API_URL;
   const { createMarzbanUserOnBothServers, extendMarzbanUserOnBothServers } = require("./marzban-utils");
 
+  // Хранилище состояний настройки после покупки: chatId -> { subscriptionId, step, device }
+  const setupStates = new Map();
+
 
   /* Утилита: безопасное редактирование сообщения */
   async function editOrAnswer(ctx, text, keyboard) {
@@ -284,29 +287,26 @@ bot.action("balance_refresh", async (ctx) => {
         },
       });
 
+// Получаем обе ссылки из БД
+const lastSub = await prisma.subscription.findUnique({ where: { id: result.sub.id } });
+
+// Сообщение о успешной покупке
 let successText = `✅ Подписка оформлена: ${plan.label}
 Действует до: ${formatDate(result.sub.endDate)}
 
-Текущий баланс: ${ruMoney(result.balance)}
+Текущий баланс: ${ruMoney(result.balance)}`;
 
-ℹ️ Чтобы установить подписку на ваше устройство, перейдите в раздел «Инструкции».`;
-
-// Получаем обе ссылки из БД
-const lastSub = await prisma.subscription.findUnique({ where: { id: result.sub.id } });
-if (lastSub.subscriptionUrl) {
-  successText += `\n\n🔗 Ваша ссылка: ${lastSub.subscriptionUrl}`;
-}
-if (lastSub.subscriptionUrl2) {
-  successText += `\n\n🔗 Ссылка для операторов Миранда: ${lastSub.subscriptionUrl2}`;
-}
-
-// Добавляем кнопки для инструкций
+// Кнопка для начала настройки
 const keyboard = Markup.inlineKeyboard([
-  [Markup.button.callback("📖 Инструкции", "instructions")],
+  [Markup.button.callback("📱 Выберите устройство для настройки", `setup_device_${result.sub.id}`)],
   [Markup.button.callback("⬅️ В меню", "back")]
 ]);
 
 await editOrAnswer(ctx, successText, keyboard);
+
+// Сохраняем состояние настройки (начинаем с выбора устройства)
+const chatId = String(ctx.chat?.id || ctx.from?.id);
+setupStates.set(chatId, { subscriptionId: result.sub.id, step: 'device_select' });
 
 
     } catch (e) {
@@ -622,6 +622,252 @@ return tx.subscription.update({
       console.error("extend error:", err);
       await editOrAnswer(ctx, "Ошибка при продлении. Попробуйте позже.", mainMenu(user.balance));
     }
+  });
+
+  // ========== ИНТЕРАКТИВНАЯ НАСТРОЙКА ПОСЛЕ ПОКУПКИ ==========
+  
+  // Шаг 1: Выбор устройства
+  bot.action(/^setup_device_(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const subscriptionId = parseInt(ctx.match[1], 10);
+    const chatId = String(ctx.chat?.id || ctx.from?.id);
+    
+    // Проверяем, что подписка принадлежит пользователю
+    const sub = await prisma.subscription.findUnique({ where: { id: subscriptionId } });
+    if (!sub || sub.userId !== ctx.dbUser.id) {
+      return ctx.reply("Подписка не найдена.");
+    }
+
+    // Сохраняем состояние
+    setupStates.set(chatId, { subscriptionId, step: 'device_select', device: null });
+
+    const text = `📱 Выберите устройство, на которое вы будете устанавливать подписку:`;
+    
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback("🍎 iPhone (iOS)", `setup_choose_ios_${subscriptionId}`)],
+      [Markup.button.callback("📱 Android", `setup_choose_android_${subscriptionId}`)],
+      [Markup.button.callback("💻 Windows", `setup_choose_windows_${subscriptionId}`)],
+      [Markup.button.callback("🖥️ macOS", `setup_choose_macos_${subscriptionId}`)],
+      [Markup.button.callback("⬅️ Назад", "back")]
+    ]);
+
+    await editOrAnswer(ctx, text, keyboard);
+  });
+
+  // Шаг 2: После выбора устройства - скачать приложение
+  bot.action(/^setup_choose_(ios|android|windows|macos)_(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const device = ctx.match[1];
+    const subscriptionId = parseInt(ctx.match[2], 10);
+    const chatId = String(ctx.chat?.id || ctx.from?.id);
+
+    // Проверяем подписку
+    const sub = await prisma.subscription.findUnique({ where: { id: subscriptionId } });
+    if (!sub || sub.userId !== ctx.dbUser.id) {
+      return ctx.reply("Подписка не найдена.");
+    }
+
+    // Ссылки для скачивания
+    const downloadLinks = {
+      ios: "https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973",
+      android: "https://play.google.com/store/apps/details?id=com.happproxy",
+      windows: "https://github.com/Happ-proxy/happ-desktop/releases/latest/download/setup-Happ.x64.exe",
+      macos: "https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973"
+    };
+
+    const deviceNames = {
+      ios: "iPhone (iOS)",
+      android: "Android",
+      windows: "Windows",
+      macos: "macOS"
+    };
+
+    // Сохраняем состояние
+    setupStates.set(chatId, { subscriptionId, step: 'download_app', device });
+
+    const text = `📥 Скачайте приложение Happ для ${deviceNames[device]}:
+
+Нажмите кнопку ниже, чтобы перейти в магазин приложений.`;
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.url("📥 Скачать Happ", downloadLinks[device])],
+      [Markup.button.callback("✅ Я скачал приложение", `setup_downloaded_${device}_${subscriptionId}`)],
+      [Markup.button.callback("⬅️ Назад", `setup_device_${subscriptionId}`)]
+    ]);
+
+    await editOrAnswer(ctx, text, keyboard);
+  });
+
+  // Шаг 3: После скачивания - пошаговая инструкция
+  bot.action(/^setup_downloaded_(ios|android|windows|macos)_(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const device = ctx.match[1];
+    const subscriptionId = parseInt(ctx.match[2], 10);
+    const chatId = String(ctx.chat?.id || ctx.from?.id);
+
+    // Проверяем подписку и получаем ссылки
+    const sub = await prisma.subscription.findUnique({ where: { id: subscriptionId } });
+    if (!sub || sub.userId !== ctx.dbUser.id) {
+      return ctx.reply("Подписка не найдена.");
+    }
+
+    const subscriptionUrl = sub.subscriptionUrl || sub.subscriptionUrl2;
+    if (!subscriptionUrl) {
+      return ctx.reply("❌ Ссылка подписки не найдена. Обратитесь в поддержку.");
+    }
+
+    // Формируем deep link для Happ (если поддерживается)
+    // Формат может отличаться, используем универсальный подход
+    const encodedUrl = encodeURIComponent(subscriptionUrl);
+    
+    // Пошаговая инструкция для каждого устройства
+    const instructions = {
+      ios: `📱 Пошаговая настройка для iPhone:
+
+1️⃣ Откройте приложение Happ на вашем iPhone
+
+2️⃣ Нажмите кнопку "+" в правом верхнем углу
+
+3️⃣ Выберите "Import from URL"
+
+4️⃣ ${subscriptionUrl ? `Нажмите кнопку ниже, чтобы автоматически вставить ссылку, или скопируйте вручную:
+\`${subscriptionUrl}\`` : 'Вставьте вашу ссылку подписки'}
+
+5️⃣ Нажмите "Import"
+
+6️⃣ После импорта нажмите на созданную конфигурацию
+
+7️⃣ Включите VPN-подключение кнопкой "Connect"
+
+✅ Готово! Ваш интернет работает через VPN.`,
+      
+      android: `📱 Пошаговая настройка для Android:
+
+1️⃣ Откройте приложение Happ на вашем устройстве
+
+2️⃣ Нажмите кнопку "+" в правом верхнем углу
+
+3️⃣ Выберите "Import from URL"
+
+4️⃣ ${subscriptionUrl ? `Нажмите кнопку ниже, чтобы автоматически вставить ссылку, или скопируйте вручную:
+\`${subscriptionUrl}\`` : 'Вставьте вашу ссылку подписки'}
+
+5️⃣ Нажмите "Import"
+
+6️⃣ После импорта нажмите на созданную конфигурацию
+
+7️⃣ Включите VPN-подключение кнопкой "Connect"
+
+✅ Готово! Ваш интернет работает через VPN.`,
+      
+      windows: `💻 Пошаговая настройка для Windows:
+
+1️⃣ Откройте программу Happ на вашем компьютере
+
+2️⃣ Нажмите кнопку "+" в правом верхнем углу
+
+3️⃣ Выберите "Import from URL"
+
+4️⃣ ${subscriptionUrl ? `Скопируйте ссылку подписки:
+\`${subscriptionUrl}\`` : 'Вставьте вашу ссылку подписки'}
+
+5️⃣ Вставьте ссылку в поле и нажмите "Import"
+
+6️⃣ После импорта нажмите на созданную конфигурацию
+
+7️⃣ Включите VPN-подключение кнопкой "Connect"
+
+✅ Готово! Ваш интернет работает через VPN.`,
+      
+      macos: `🖥️ Пошаговая настройка для macOS:
+
+1️⃣ Откройте приложение Happ на вашем Mac
+
+2️⃣ Нажмите кнопку "+" в правом верхнем углу
+
+3️⃣ Выберите "Import from URL"
+
+4️⃣ ${subscriptionUrl ? `Скопируйте ссылку подписки:
+\`${subscriptionUrl}\`` : 'Вставьте вашу ссылку подписки'}
+
+5️⃣ Вставьте ссылку в поле и нажмите "Import"
+
+6️⃣ После импорта нажмите на созданную конфигурацию
+
+7️⃣ Включите VPN-подключение кнопкой "Connect"
+
+✅ Готово! Ваш интернет работает через VPN.`
+    };
+
+    // Кнопки для инструкции
+    const buttons = [];
+    
+    // Для мобильных устройств добавляем кнопку с deep link (если доступно)
+    if ((device === 'ios' || device === 'android') && subscriptionUrl) {
+      // Попробуем использовать deep link для Happ
+      // Формат может быть разным, используем универсальный подход через clipboard
+      buttons.push([Markup.button.callback("📋 Скопировать ссылку подписки", `setup_copy_url_${subscriptionId}`)]);
+    } else if (subscriptionUrl) {
+      buttons.push([Markup.button.callback("📋 Скопировать ссылку подписки", `setup_copy_url_${subscriptionId}`)]);
+    }
+
+    buttons.push(
+      [Markup.button.callback("✅ Я настроил VPN", `setup_complete_${subscriptionId}`)],
+      [Markup.button.callback("⬅️ В меню", "back")]
+    );
+
+    await editOrAnswer(ctx, instructions[device], Markup.inlineKeyboard(buttons));
+
+    // Сохраняем состояние
+    setupStates.set(chatId, { subscriptionId, step: 'instructions', device, subscriptionUrl });
+  });
+
+  // Копирование ссылки
+  bot.action(/^setup_copy_url_(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const subscriptionId = parseInt(ctx.match[1], 10);
+
+    const sub = await prisma.subscription.findUnique({ where: { id: subscriptionId } });
+    if (!sub || sub.userId !== ctx.dbUser.id) {
+      return;
+    }
+
+    const subscriptionUrl = sub.subscriptionUrl || sub.subscriptionUrl2;
+    if (!subscriptionUrl) {
+      return ctx.answerCbQuery("❌ Ссылка не найдена", true);
+    }
+
+    await ctx.reply(`📋 Ссылка подписки для копирования:\n\n\`${subscriptionUrl}\`\n\n💡 Скопируйте эту ссылку и вставьте в приложение Happ.`, { parse_mode: 'Markdown' });
+    await ctx.answerCbQuery("✅ Ссылка скопирована в сообщении выше");
+  });
+
+  // Завершение настройки
+  bot.action(/^setup_complete_(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const subscriptionId = parseInt(ctx.match[1], 10);
+    const chatId = String(ctx.chat?.id || ctx.from?.id);
+
+    // Очищаем состояние
+    setupStates.delete(chatId);
+
+    const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+    
+    await editOrAnswer(
+      ctx,
+      `✅ Отлично! Ваш VPN настроен и готов к работе.
+
+Если у вас возникнут вопросы, используйте раздел «📖 Инструкции» в главном меню.`,
+      mainMenu(user.balance)
+    );
+  });
+
+  // Очистка состояния при других действиях
+  bot.use(async (ctx, next) => {
+    if (ctx.callbackQuery && !ctx.callbackQuery.data?.startsWith("setup_")) {
+      const chatId = String(ctx.chat?.id || ctx.from?.id);
+      setupStates.delete(chatId);
+    }
+    return next();
   });
 
   }
