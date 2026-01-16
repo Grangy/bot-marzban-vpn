@@ -23,6 +23,7 @@
     instructionsMenu,
   } = require("./menus");
   const MARZBAN_API_URL = process.env.MARZBAN_API_URL;
+  const { createMarzbanUserOnBothServers } = require("./marzban-utils");
 
 
   /* Утилита: безопасное редактирование сообщения */
@@ -256,43 +257,32 @@ bot.action("balance_refresh", async (ctx) => {
         return;
       }
 
-      // 🔥 ВЫЗОВ MARZBAN API
+      // 🔥 ВЫЗОВ MARZBAN API (создаем пользователя на обоих серверах)
       const expireSeconds = plan.months === 12 ? 365*24*60*60 : plan.months*30*24*60*60;
       const expire = Math.floor(Date.now() / 1000) + expireSeconds;
 
       const username = `${ctx.dbUser.telegramId}_${plan.type}_${result.sub.id}`;
 
-      const apiResponse = await fetch(`${MARZBAN_API_URL}/users`, {
-      method: "POST",
-      headers: { 
-        "Content-Type": "application/json",
-        ...(process.env.MARZBAN_TOKEN ? { "Authorization": `Bearer ${process.env.MARZBAN_TOKEN}` } : {})
-      },
-      body: JSON.stringify({
-          username, // 🔥 теперь имя = telegramId_срок_idПодписки
-          status: "active",
-          expire,
-          proxies: { vless: {} },
-          inbounds: { vless: ["VLESS TCP REALITY", "VLESS-TCP-REALITY-VISION"] },
-          note: `Telegram user ${ctx.dbUser.accountName || ctx.dbUser.telegramId}`,
-      }),
+      const userData = {
+        username,
+        status: "active",
+        expire,
+        proxies: { vless: {} },
+        inbounds: { vless: ["VLESS TCP REALITY", "VLESS-TCP-REALITY-VISION"] },
+        note: `Telegram user ${ctx.dbUser.accountName || ctx.dbUser.telegramId}`,
+      };
+
+      // Создаем пользователя на обоих серверах
+      const { url1: subscriptionUrl, url2: subscriptionUrl2 } = await createMarzbanUserOnBothServers(userData);
+
+      // Сохраняем обе ссылки в БД
+      await prisma.subscription.update({
+        where: { id: result.sub.id },
+        data: { 
+          subscriptionUrl,
+          subscriptionUrl2
+        },
       });
-
-
-      if (!apiResponse.ok) {
-        console.error("Marzban API error", await apiResponse.text());
-      } else {
-        const apiUser = await apiResponse.json();
-
-        // допустим, в ответе Marzban есть subscription_url
-        const subscriptionUrl = apiUser?.subscription_url || null;
-
-        // сохраняем в БД
-        await prisma.subscription.update({
-          where: { id: result.sub.id },
-          data: { subscriptionUrl },
-        });
-      }
 
 let successText = `✅ Подписка оформлена: ${plan.label}
 Действует до: ${formatDate(result.sub.endDate)}
@@ -301,10 +291,13 @@ let successText = `✅ Подписка оформлена: ${plan.label}
 
 ℹ️ Чтобы установить подписку на ваше устройство, перейдите в раздел «Инструкции».`;
 
-// если в ответе от API пришла ссылка и мы её сохранили
+// Получаем обе ссылки из БД
 const lastSub = await prisma.subscription.findUnique({ where: { id: result.sub.id } });
 if (lastSub.subscriptionUrl) {
   successText += `\n\n🔗 Ваша ссылка: ${lastSub.subscriptionUrl}`;
+}
+if (lastSub.subscriptionUrl2) {
+  successText += `\n\n🔗 Ссылка для операторов Миранда: ${lastSub.subscriptionUrl2}`;
 }
 
 // Добавляем кнопки для инструкций
@@ -514,6 +507,9 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
 
       if (s.subscriptionUrl) {
         text += `\n\n🔗 Ваша ссылка: ${s.subscriptionUrl}`;
+      }
+      if (s.subscriptionUrl2) {
+        text += `\n\n🔗 Ссылка для операторов Миранда: ${s.subscriptionUrl2}`;
       }
 
       const buttons = [[Markup.button.callback("⬅️ Назад", "my_subs")]];

@@ -60,7 +60,8 @@ model Subscription {
   endDate         DateTime?
   userId          Int
   user            User             @relation(fields: [userId], references: [id])
-  subscriptionUrl String?          // 🔥 новая колонка
+  subscriptionUrl String?          // 🔥 основная ссылка (vpn.grangy.ru)
+  subscriptionUrl2 String?         // 🔥 вторая ссылка для rus2 (rus2.grangy.ru:8888)
   notified3Days            Boolean   @default(false)  // уведомление за 3 дня отправлено
   notified1Day             Boolean   @default(false)  // уведомление за 1 день отправлено
   lastExpiredReminderAt    DateTime?   

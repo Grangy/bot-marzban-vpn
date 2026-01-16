@@ -6,6 +6,7 @@ const { SubscriptionType } = require("@prisma/client");
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 const MARZBAN_API_URL = process.env.MARZBAN_API_URL;
+const { createMarzbanUserOnBothServers } = require("./marzban-utils");
 
 // Хранилище пользователей, ожидающих ввода промокода (chatId -> true)
 const waitingForPromoCode = new Set();
@@ -66,13 +67,36 @@ async function activatePromoCode(ctx, inputCode) {
       return { ok: false, message: "❌ Не удалось активировать промокод." };
     }
 
-    // создаём VPN пользователя в Marzban и получаем ссылку
-    const subscriptionUrl = await createMarzbanUser(ctx.dbUser.telegramId, result.sub.id);
+    // создаём VPN пользователя в Marzban на обоих серверах и получаем ссылки
+    const username = `${ctx.dbUser.telegramId}_PROMO_${result.sub.id}`;
+    const expireSeconds = 3 * 24 * 60 * 60; // 3 дня в секундах
+    const expire = Math.floor(Date.now() / 1000) + expireSeconds;
     
-    // обновляем подписку с полученной ссылкой
+    const userData = {
+      username,
+      status: "active",
+      expire,
+      proxies: {
+        vless: {
+          id: require("crypto").randomUUID(),
+          flow: "xtls-rprx-vision"
+        }
+      },
+      inbounds: { vless: ["VLESS TCP REALITY", "VLESS-TCP-REALITY-VISION"] },
+      note: `Telegram user ${ctx.dbUser.accountName || ctx.dbUser.telegramId}`,
+      data_limit: 0,
+      data_limit_reset_strategy: "no_reset"
+    };
+    
+    const { url1: subscriptionUrl, url2: subscriptionUrl2 } = await createMarzbanUserOnBothServers(userData);
+    
+    // обновляем подписку с полученными ссылками
     await prisma.subscription.update({
       where: { id: result.sub.id },
-      data: { subscriptionUrl }
+      data: { 
+        subscriptionUrl,
+        subscriptionUrl2
+      }
     });
 
     // оповестим владельца кода (если возможен DM)
@@ -88,10 +112,20 @@ async function activatePromoCode(ctx, inputCode) {
       // молча игнорируем
     }
 
+    // Получаем обе ссылки из БД
+    const updatedSub = await prisma.subscription.findUnique({ where: { id: result.sub.id } });
+    
     // показываем успешную активацию с ссылкой на VPN
-    const successMessage = `✅ Промокод применён! Вы получили VPN на 3 дня с обходом блокировок мобильной связи.
-
-🔗 Ссылка на подписку: ${subscriptionUrl}
+    let successMessage = `✅ Промокод применён! Вы получили VPN на 3 дня с обходом блокировок мобильной связи.`;
+    
+    if (updatedSub.subscriptionUrl) {
+      successMessage += `\n\n🔗 Ссылка на подписку: ${updatedSub.subscriptionUrl}`;
+    }
+    if (updatedSub.subscriptionUrl2) {
+      successMessage += `\n\n🔗 Ссылка для операторов Миранда: ${updatedSub.subscriptionUrl2}`;
+    }
+    
+    successMessage += `
 
 📱 Как использовать:
 1. Скопируйте ссылку выше
@@ -119,64 +153,6 @@ function shareLink(text) {
   return `${base}?url=&text=${encodeURIComponent(text)}`;
 }
 
-// Функция для создания пользователя в Marzban API
-async function createMarzbanUser(telegramId, subscriptionId) {
-  console.log("[DEBUG] MARZBAN_API_URL:", MARZBAN_API_URL);
-  
-  if (!MARZBAN_API_URL || MARZBAN_API_URL === "your_marzban_api_url") {
-    console.log("[DEBUG] Using fake URL - API not configured");
-    // Если API не настроен, возвращаем фейковую ссылку
-    return `https://fake-vpn.local/subscription/${subscriptionId}`;
-  }
-
-  const username = `${telegramId}_PROMO_${subscriptionId}`;
-  const expireSeconds = 3 * 24 * 60 * 60; // 3 дня в секундах
-  const expire = Math.floor(Date.now() / 1000) + expireSeconds;
-
-  const userData = {
-    username: username,
-    proxies: {
-      vless: {
-        id: require("crypto").randomUUID(),
-        flow: "xtls-rprx-vision"
-      }
-    },
-    inbounds: { vless: ["VLESS TCP REALITY", "VLESS-TCP-REALITY-VISION"] },
-    expire: expire,
-    data_limit: 0, // без ограничений
-    data_limit_reset_strategy: "no_reset"
-  };
-
-  try {
-    console.log("[DEBUG] Sending request to Marzban API:", `${MARZBAN_API_URL}/users`);
-    console.log("[DEBUG] User data:", JSON.stringify(userData, null, 2));
-    
-    const response = await fetch(`${MARZBAN_API_URL}/users`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.MARZBAN_TOKEN || "fake_token"}`
-      },
-      body: JSON.stringify(userData)
-    });
-
-    console.log("[DEBUG] Response status:", response.status);
-    console.log("[DEBUG] Response headers:", response.headers);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[Marzban] Failed to create user:", errorText);
-      return `https://fake-vpn.local/subscription/${subscriptionId}`;
-    }
-
-    const result = await response.json();
-    console.log("[DEBUG] Marzban response:", JSON.stringify(result, null, 2));
-    return result.subscription_url || `https://fake-vpn.local/subscription/${subscriptionId}`;
-  } catch (error) {
-    console.error("[Marzban] Error creating user:", error);
-    return `https://fake-vpn.local/subscription/${subscriptionId}`;
-  }
-}
 
 function registerPromo(bot) {
   // Middleware для очистки состояния ожидания при нажатии других кнопок
