@@ -799,8 +799,9 @@ return tx.subscription.update({
     const buttons = [];
     
     // Кнопка для автоматического добавления подписки в Happ (deep link)
+    // Telegram не поддерживает happ:// протокол в URL кнопках, поэтому используем callback
     if (subscriptionUrl) {
-      buttons.push([Markup.button.url("➕ Добавить подписку", happDeepLink)]);
+      buttons.push([Markup.button.callback("➕ Добавить подписку в Happ", `setup_add_to_happ_${subscriptionId}`)]);
     }
 
     buttons.push(
@@ -812,6 +813,42 @@ return tx.subscription.update({
 
     // Сохраняем состояние
     setupStates.set(chatId, { subscriptionId, step: 'instructions', device, subscriptionUrl });
+  });
+
+  // Обработчик для кнопки "Добавить подписку в Happ"
+  bot.action(/^setup_add_to_happ_(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const subscriptionId = parseInt(ctx.match[1], 10);
+
+    const sub = await prisma.subscription.findUnique({ where: { id: subscriptionId } });
+    if (!sub || sub.userId !== ctx.dbUser.id) {
+      return ctx.reply("Подписка не найдена.");
+    }
+
+    const subscriptionUrl = sub.subscriptionUrl || sub.subscriptionUrl2;
+    if (!subscriptionUrl) {
+      return ctx.answerCbQuery("❌ Ссылка не найдена", true);
+    }
+
+    // Формируем deep link для Happ
+    const encodedUrl = encodeURIComponent(subscriptionUrl);
+    const happDeepLink = `happ://add/${encodedUrl}`;
+
+    // Отправляем сообщение с кликабельным deep link
+    // В Telegram deep links в тексте сообщений кликабельны
+    await ctx.reply(
+      `➕ Нажмите на ссылку ниже, чтобы автоматически добавить подписку в Happ:\n\n` +
+      `${happDeepLink}\n\n` +
+      `💡 Если ссылка не работает, скопируйте её и откройте в Happ вручную.\n\n` +
+      `📋 Или скопируйте обычную ссылку подписки:\n\`${subscriptionUrl}\``,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: Markup.inlineKeyboard([
+          [Markup.button.callback("✅ Я добавил подписку", `setup_complete_${subscriptionId}`)],
+          [Markup.button.callback("⬅️ Назад", `setup_device_${subscriptionId}`)]
+        ]).reply_markup
+      }
+    );
   });
 
 
