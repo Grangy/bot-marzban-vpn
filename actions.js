@@ -711,14 +711,12 @@ return tx.subscription.update({
       return ctx.reply("Подписка не найдена.");
     }
 
-    const subscriptionUrl = sub.subscriptionUrl || sub.subscriptionUrl2;
-    if (!subscriptionUrl) {
-      return ctx.reply("❌ Ссылка подписки не найдена. Обратитесь в поддержку.");
+    const subscriptionUrl = sub.subscriptionUrl;
+    const subscriptionUrl2 = sub.subscriptionUrl2;
+    
+    if (!subscriptionUrl && !subscriptionUrl2) {
+      return ctx.reply("❌ Ссылки подписки не найдены. Обратитесь в поддержку.");
     }
-
-    // Формируем deep link для Happ: happ://add/ENCODED_URL
-    const encodedUrl = encodeURIComponent(subscriptionUrl);
-    const happDeepLink = `happ://add/${encodedUrl}`;
     
     // Пошаговая инструкция для каждого устройства
     const instructions = {
@@ -730,7 +728,7 @@ return tx.subscription.update({
 
 3️⃣ Выберите "Import from URL"
 
-4️⃣ ${subscriptionUrl ? `Нажмите кнопку "Добавить подписку" ниже, чтобы автоматически добавить ссылку в Happ` : 'Вставьте вашу ссылку подписки'}
+4️⃣ Добавьте подписки в Happ (см. ссылки ниже)
 
 5️⃣ Нажмите "Import"
 
@@ -748,7 +746,7 @@ return tx.subscription.update({
 
 3️⃣ Выберите "Import from URL"
 
-4️⃣ ${subscriptionUrl ? `Нажмите кнопку "Добавить подписку" ниже, чтобы автоматически добавить ссылку в Happ` : 'Вставьте вашу ссылку подписки'}
+4️⃣ Добавьте подписки в Happ (см. ссылки ниже)
 
 5️⃣ Нажмите "Import"
 
@@ -766,7 +764,7 @@ return tx.subscription.update({
 
 3️⃣ Выберите "Import from URL"
 
-4️⃣ ${subscriptionUrl ? `Нажмите кнопку "Добавить подписку" ниже, чтобы автоматически добавить ссылку в Happ` : 'Вставьте вашу ссылку подписки'}
+4️⃣ Добавьте подписки в Happ (см. ссылки ниже)
 
 5️⃣ Вставьте ссылку в поле и нажмите "Import"
 
@@ -784,7 +782,7 @@ return tx.subscription.update({
 
 3️⃣ Выберите "Import from URL"
 
-4️⃣ ${subscriptionUrl ? `Нажмите кнопку "Добавить подписку" ниже, чтобы автоматически добавить ссылку в Happ` : 'Вставьте вашу ссылку подписки'}
+4️⃣ Добавьте подписки в Happ (см. ссылки ниже)
 
 5️⃣ Вставьте ссылку в поле и нажмите "Import"
 
@@ -795,61 +793,43 @@ return tx.subscription.update({
 ✅ Готово! Ваш интернет работает через VPN.`
     };
 
-    // Кнопки для инструкции
-    const buttons = [];
+    // Формируем сообщение с deep links для обеих подписок
+    let fullMessage = instructions[device];
     
-    // Кнопка для автоматического добавления подписки в Happ (deep link)
-    // Telegram не поддерживает happ:// протокол в URL кнопках, поэтому используем callback
+    // Добавляем deep links для обеих подписок
+    fullMessage += `\n\n📝 Инструкция по добавлению подписок:\n`;
+    fullMessage += `Вам необходимо в начале добавить 1 и в таком же порядке добавить 2.\n\n`;
+    
+    // Первая ссылка (основная)
     if (subscriptionUrl) {
-      buttons.push([Markup.button.callback("➕ Добавить подписку в Happ", `setup_add_to_happ_${subscriptionId}`)]);
+      const encodedUrl1 = encodeURIComponent(subscriptionUrl);
+      const happDeepLink1 = `happ://add/${encodedUrl1}`;
+      fullMessage += `1️⃣ Основная подписка:\n${happDeepLink1}\n\n`;
     }
+    
+    // Вторая ссылка (для операторов Миранда)
+    if (subscriptionUrl2) {
+      const encodedUrl2 = encodeURIComponent(subscriptionUrl2);
+      const happDeepLink2 = `happ://add/${encodedUrl2}`;
+      fullMessage += `2️⃣ Для операторов Миранда:\n${happDeepLink2}\n\n`;
+      fullMessage += `💡 Если у вас оператор Миранда, используйте эту ссылку (2️⃣).\n\n`;
+    }
+    
+    fullMessage += `💡 Нажмите на ссылки выше, чтобы автоматически добавить подписки в Happ.`;
 
-    buttons.push(
+    // Кнопки для инструкции
+    const buttons = [
       [Markup.button.callback("✅ Я настроил VPN", `setup_complete_${subscriptionId}`)],
+      [Markup.button.callback("📖 Инструкции", "instructions")],
       [Markup.button.callback("⬅️ В меню", "back")]
-    );
+    ];
 
-    await editOrAnswer(ctx, instructions[device], Markup.inlineKeyboard(buttons));
+    await editOrAnswer(ctx, fullMessage, Markup.inlineKeyboard(buttons));
 
     // Сохраняем состояние
     setupStates.set(chatId, { subscriptionId, step: 'instructions', device, subscriptionUrl });
   });
 
-  // Обработчик для кнопки "Добавить подписку в Happ"
-  bot.action(/^setup_add_to_happ_(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery();
-    const subscriptionId = parseInt(ctx.match[1], 10);
-
-    const sub = await prisma.subscription.findUnique({ where: { id: subscriptionId } });
-    if (!sub || sub.userId !== ctx.dbUser.id) {
-      return ctx.reply("Подписка не найдена.");
-    }
-
-    const subscriptionUrl = sub.subscriptionUrl || sub.subscriptionUrl2;
-    if (!subscriptionUrl) {
-      return ctx.answerCbQuery("❌ Ссылка не найдена", true);
-    }
-
-    // Формируем deep link для Happ
-    const encodedUrl = encodeURIComponent(subscriptionUrl);
-    const happDeepLink = `happ://add/${encodedUrl}`;
-
-    // Отправляем сообщение с кликабельным deep link
-    // В Telegram deep links в тексте сообщений кликабельны
-    await ctx.reply(
-      `➕ Нажмите на ссылку ниже, чтобы автоматически добавить подписку в Happ:\n\n` +
-      `${happDeepLink}\n\n` +
-      `💡 Если ссылка не работает, скопируйте её и откройте в Happ вручную.\n\n` +
-      `📋 Или скопируйте обычную ссылку подписки:\n\`${subscriptionUrl}\``,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: Markup.inlineKeyboard([
-          [Markup.button.callback("✅ Я добавил подписку", `setup_complete_${subscriptionId}`)],
-          [Markup.button.callback("⬅️ Назад", `setup_device_${subscriptionId}`)]
-        ]).reply_markup
-      }
-    );
-  });
 
 
   // Завершение настройки
@@ -861,14 +841,20 @@ return tx.subscription.update({
     // Очищаем состояние
     setupStates.delete(chatId);
 
-    const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+    // Ссылка на канал с отзывами (можно настроить через переменную окружения)
+    const reviewsChannel = process.env.REVIEWS_CHANNEL || "@your_reviews_channel";
     
     await editOrAnswer(
       ctx,
       `✅ Отлично! Ваш VPN настроен и готов к работе.
 
-Если у вас возникнут вопросы, используйте раздел «📖 Инструкции» в главном меню.`,
-      mainMenu(user.balance)
+Если у вас возникнут вопросы, используйте раздел «📖 Инструкции» в главном меню.
+
+💬 Мы будем рады вашему отзыву!`,
+      Markup.inlineKeyboard([
+        [Markup.button.url("💬 Оставить отзыв", `https://t.me/${reviewsChannel.replace('@', '')}`)],
+        [Markup.button.callback("⬅️ В меню", "back")]
+      ])
     );
   });
 
