@@ -822,8 +822,8 @@ return tx.subscription.update({
     // Очищаем состояние
     setupStates.delete(chatId);
 
-    // Ссылка на канал с отзывами (можно настроить через переменную окружения)
-    const reviewsChannel = process.env.REVIEWS_CHANNEL || "@your_reviews_channel";
+    // Ссылка на канал с отзывами
+    const reviewsChannelUrl = process.env.REVIEWS_CHANNEL_URL || "https://t.me/vpnmax_off/8";
     
     await editOrAnswer(
       ctx,
@@ -833,7 +833,7 @@ return tx.subscription.update({
 
 💬 Мы будем рады вашему отзыву!`,
       Markup.inlineKeyboard([
-        [Markup.button.url("💬 Оставить отзыв", `https://t.me/${reviewsChannel.replace('@', '')}`)],
+        [Markup.button.url("💬 Оставить отзыв", reviewsChannelUrl)],
         [Markup.button.callback("⬅️ В меню", "back")]
       ])
     );
