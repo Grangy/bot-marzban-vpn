@@ -57,7 +57,7 @@ async function main() {
   // Получаем всех пользователей с chatId
   const users = await prisma.user.findMany({
     where: {
-      chatId: { not: null }
+      chatId: { not: "" }
     },
     select: {
       id: true,
