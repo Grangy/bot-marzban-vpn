@@ -98,21 +98,48 @@ function registerWebAppAPI(app) {
 
   /**
    * GET /api/user/:telegramId
-   * Получить данные пользователя (личный кабинет)
+   * Получить ВСЕ данные пользователя из БД (полный личный кабинет)
    */
   app.get("/api/user/:telegramId", async (req, res) => {
     try {
       const { telegramId } = req.params;
       
+      // Получаем пользователя со ВСЕМИ связанными данными
       const user = await prisma.user.findFirst({
         where: { telegramId: String(telegramId) },
         include: {
+          // ВСЕ подписки (включая истекшие и FREE)
           subscriptions: {
-            where: {
-              type: { not: "FREE" },
-              endDate: { gt: new Date() }
-            },
             orderBy: { endDate: "desc" }
+          },
+          // ВСЕ пополнения
+          topUps: {
+            orderBy: { createdAt: "desc" }
+          },
+          // Промокоды пользователя
+          promoActivationsAsOwner: {
+            include: {
+              activator: {
+                select: {
+                  id: true,
+                  telegramId: true,
+                  accountName: true
+                }
+              }
+            },
+            orderBy: { createdAt: "desc" }
+          },
+          // Активация промокода пользователем
+          promoActivationAsUser: {
+            include: {
+              codeOwner: {
+                select: {
+                  id: true,
+                  telegramId: true,
+                  accountName: true
+                }
+              }
+            }
           }
         }
       });
@@ -125,15 +152,47 @@ function registerWebAppAPI(app) {
         });
       }
 
+      // Статистика по подпискам
+      const activeSubscriptions = user.subscriptions.filter(sub => 
+        sub.endDate && sub.endDate > new Date() && sub.type !== "FREE"
+      );
+      const expiredSubscriptions = user.subscriptions.filter(sub => 
+        sub.endDate && sub.endDate <= new Date()
+      );
+
+      // Статистика по пополнениям
+      const successfulTopups = user.topUps.filter(t => t.status === "SUCCESS" && t.credited);
+      const totalTopupAmount = successfulTopups.reduce((sum, t) => sum + t.amount, 0);
+
       // Форматируем данные для ответа
       const response = {
         ok: true,
         data: {
+          // Основные данные пользователя
           id: user.id,
           telegramId: user.telegramId,
+          chatId: user.chatId,
           username: user.accountName,
           balance: user.balance,
+          promoCode: user.promoCode,
           createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+          
+          // Статистика
+          stats: {
+            totalSubscriptions: user.subscriptions.length,
+            activeSubscriptions: activeSubscriptions.length,
+            expiredSubscriptions: expiredSubscriptions.length,
+            totalTopups: user.topUps.length,
+            successfulTopups: successfulTopups.length,
+            totalTopupAmount: totalTopupAmount,
+            totalSpent: totalTopupAmount - user.balance,
+            promoCodeGiven: user.promoCode ? 1 : 0,
+            promoActivationsReceived: user.promoActivationsAsOwner.length,
+            promoActivated: user.promoActivationAsUser ? 1 : 0
+          },
+          
+          // ВСЕ подписки
           subscriptions: user.subscriptions.map(sub => ({
             id: sub.id,
             type: sub.type,
@@ -141,9 +200,52 @@ function registerWebAppAPI(app) {
             endDate: sub.endDate,
             subscriptionUrl: sub.subscriptionUrl,
             subscriptionUrl2: sub.subscriptionUrl2,
-            isActive: sub.endDate > new Date(),
-            daysLeft: Math.ceil((new Date(sub.endDate) - new Date()) / (1000 * 60 * 60 * 24))
-          }))
+            notified3Days: sub.notified3Days,
+            notified1Day: sub.notified1Day,
+            lastExpiredReminderAt: sub.lastExpiredReminderAt,
+            isActive: sub.endDate ? sub.endDate > new Date() : false,
+            daysLeft: sub.endDate 
+              ? Math.ceil((new Date(sub.endDate) - new Date()) / (1000 * 60 * 60 * 24)) 
+              : null,
+            isExpired: sub.endDate ? sub.endDate <= new Date() : false
+          })),
+          
+          // ВСЕ пополнения
+          topups: user.topUps.map(topup => ({
+            id: topup.id,
+            orderId: topup.orderId,
+            billId: topup.billId,
+            amount: topup.amount,
+            status: topup.status,
+            credited: topup.credited,
+            createdAt: topup.createdAt,
+            creditedAt: topup.creditedAt,
+            updatedAt: topup.updatedAt
+          })),
+          
+          // Промокоды (где пользователь - владелец)
+          promoActivationsReceived: user.promoActivationsAsOwner.map(activation => ({
+            id: activation.id,
+            amount: activation.amount,
+            createdAt: activation.createdAt,
+            activator: {
+              id: activation.activator.id,
+              telegramId: activation.activator.telegramId,
+              username: activation.activator.accountName
+            }
+          })),
+          
+          // Активация промокода (если пользователь использовал промокод)
+          promoActivation: user.promoActivationAsUser ? {
+            id: user.promoActivationAsUser.id,
+            amount: user.promoActivationAsUser.amount,
+            createdAt: user.promoActivationAsUser.createdAt,
+            codeOwner: {
+              id: user.promoActivationAsUser.codeOwner.id,
+              telegramId: user.promoActivationAsUser.codeOwner.telegramId,
+              username: user.promoActivationAsUser.codeOwner.accountName
+            }
+          } : null
         }
       };
 
@@ -190,12 +292,12 @@ function registerWebAppAPI(app) {
 
   /**
    * GET /api/user/:telegramId/subscriptions
-   * Получить подписки пользователя
+   * Получить ВСЕ подписки пользователя
    */
   app.get("/api/user/:telegramId/subscriptions", async (req, res) => {
     try {
       const { telegramId } = req.params;
-      const { active } = req.query; // ?active=true - только активные
+      const { active, expired, type } = req.query; // ?active=true - только активные, ?expired=true - только истекшие, ?type=M1 - по типу
       
       const user = await prisma.user.findFirst({
         where: { telegramId: String(telegramId) }
@@ -208,13 +310,18 @@ function registerWebAppAPI(app) {
         });
       }
 
-      const whereClause = {
-        userId: user.id,
-        type: { not: "FREE" }
-      };
+      const whereClause = { userId: user.id };
 
+      // Фильтры
       if (active === "true") {
         whereClause.endDate = { gt: new Date() };
+        whereClause.type = { not: "FREE" };
+      } else if (expired === "true") {
+        whereClause.endDate = { lte: new Date() };
+      }
+
+      if (type && ["M1", "M3", "M6", "M12", "PROMO_10D", "FREE"].includes(type)) {
+        whereClause.type = type;
       }
 
       const subscriptions = await prisma.subscription.findMany({
@@ -231,12 +338,183 @@ function registerWebAppAPI(app) {
           endDate: sub.endDate,
           subscriptionUrl: sub.subscriptionUrl,
           subscriptionUrl2: sub.subscriptionUrl2,
-          isActive: sub.endDate > new Date(),
+          notified3Days: sub.notified3Days,
+          notified1Day: sub.notified1Day,
+          lastExpiredReminderAt: sub.lastExpiredReminderAt,
+          isActive: sub.endDate ? sub.endDate > new Date() : false,
+          isExpired: sub.endDate ? sub.endDate <= new Date() : false,
           daysLeft: sub.endDate ? Math.ceil((new Date(sub.endDate) - new Date()) / (1000 * 60 * 60 * 24)) : null
-        }))
+        })),
+        total: subscriptions.length
       });
     } catch (error) {
       console.error("[WEBAPP] Get subscriptions error:", error);
+      res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    }
+  });
+
+  /**
+   * GET /api/user/:telegramId/stats
+   * Полная статистика пользователя
+   */
+  app.get("/api/user/:telegramId/stats", async (req, res) => {
+    try {
+      const { telegramId } = req.params;
+      
+      const user = await prisma.user.findFirst({
+        where: { telegramId: String(telegramId) },
+        include: {
+          subscriptions: true,
+          topUps: true,
+          promoActivationsAsOwner: true,
+          promoActivationAsUser: true
+        }
+      });
+
+      if (!user) {
+        return res.status(404).json({ 
+          ok: false, 
+          error: "USER_NOT_FOUND" 
+        });
+      }
+
+      // Подписки
+      const activeSubs = user.subscriptions.filter(s => s.endDate && s.endDate > new Date() && s.type !== "FREE");
+      const expiredSubs = user.subscriptions.filter(s => s.endDate && s.endDate <= new Date());
+      const subTypes = user.subscriptions.reduce((acc, s) => {
+        acc[s.type] = (acc[s.type] || 0) + 1;
+        return acc;
+      }, {});
+
+      // Пополнения
+      const successfulTopups = user.topUps.filter(t => t.status === "SUCCESS" && t.credited);
+      const totalTopupAmount = successfulTopups.reduce((sum, t) => sum + t.amount, 0);
+      const topupStatuses = user.topUps.reduce((acc, t) => {
+        acc[t.status] = (acc[t.status] || 0) + 1;
+        return acc;
+      }, {});
+
+      res.json({
+        ok: true,
+        data: {
+          user: {
+            id: user.id,
+            telegramId: user.telegramId,
+            username: user.accountName,
+            balance: user.balance,
+            promoCode: user.promoCode,
+            createdAt: user.createdAt
+          },
+          subscriptions: {
+            total: user.subscriptions.length,
+            active: activeSubs.length,
+            expired: expiredSubs.length,
+            byType: subTypes
+          },
+          topups: {
+            total: user.topUps.length,
+            successful: successfulTopups.length,
+            totalAmount: totalTopupAmount,
+            byStatus: topupStatuses
+          },
+          promo: {
+            hasPromoCode: !!user.promoCode,
+            activationsReceived: user.promoActivationsAsOwner.length,
+            totalReceivedAmount: user.promoActivationsAsOwner.reduce((sum, a) => sum + a.amount, 0),
+            hasActivated: !!user.promoActivationAsUser,
+            activatedAmount: user.promoActivationAsUser?.amount || 0
+          },
+          financial: {
+            totalTopupAmount: totalTopupAmount,
+            currentBalance: user.balance,
+            totalSpent: totalTopupAmount - user.balance
+          }
+        }
+      });
+    } catch (error) {
+      console.error("[WEBAPP] Get stats error:", error);
+      res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    }
+  });
+
+  /**
+   * GET /api/user/:telegramId/promo
+   * Информация о промокоде пользователя
+   */
+  app.get("/api/user/:telegramId/promo", async (req, res) => {
+    try {
+      const { telegramId } = req.params;
+      
+      const user = await prisma.user.findFirst({
+        where: { telegramId: String(telegramId) },
+        include: {
+          promoActivationsAsOwner: {
+            include: {
+              activator: {
+                select: {
+                  id: true,
+                  telegramId: true,
+                  accountName: true
+                }
+              }
+            },
+            orderBy: { createdAt: "desc" }
+          },
+          promoActivationAsUser: {
+            include: {
+              codeOwner: {
+                select: {
+                  id: true,
+                  telegramId: true,
+                  accountName: true,
+                  promoCode: true
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (!user) {
+        return res.status(404).json({ 
+          ok: false, 
+          error: "USER_NOT_FOUND" 
+        });
+      }
+
+      res.json({
+        ok: true,
+        data: {
+          promoCode: user.promoCode,
+          hasPromoCode: !!user.promoCode,
+          activations: {
+            count: user.promoActivationsAsOwner.length,
+            totalAmount: user.promoActivationsAsOwner.reduce((sum, a) => sum + a.amount, 0),
+            list: user.promoActivationsAsOwner.map(a => ({
+              id: a.id,
+              amount: a.amount,
+              createdAt: a.createdAt,
+              activator: {
+                id: a.activator.id,
+                telegramId: a.activator.telegramId,
+                username: a.activator.accountName
+              }
+            }))
+          },
+          activated: user.promoActivationAsUser ? {
+            amount: user.promoActivationAsUser.amount,
+            createdAt: user.promoActivationAsUser.createdAt,
+            codeOwner: {
+              id: user.promoActivationAsUser.codeOwner.id,
+              telegramId: user.promoActivationAsUser.codeOwner.telegramId,
+              username: user.promoActivationAsUser.codeOwner.accountName,
+              promoCode: user.promoActivationAsUser.codeOwner.promoCode
+            }
+          } : null
+        }
+      });
+    } catch (error) {
+      console.error("[WEBAPP] Get promo error:", error);
       res.status(500).json({ ok: false, error: "SERVER_ERROR" });
     }
   });
@@ -364,12 +642,12 @@ function registerWebAppAPI(app) {
 
   /**
    * GET /api/user/:telegramId/topups
-   * История пополнений пользователя
+   * Получить ВСЕ пополнения пользователя
    */
   app.get("/api/user/:telegramId/topups", async (req, res) => {
     try {
       const { telegramId } = req.params;
-      const { limit = 20 } = req.query;
+      const { limit, status, credited } = req.query; // ?status=SUCCESS, ?credited=true
 
       const user = await prisma.user.findFirst({
         where: { telegramId: String(telegramId) }
@@ -382,22 +660,46 @@ function registerWebAppAPI(app) {
         });
       }
 
+      const whereClause = { userId: user.id };
+
+      if (status) {
+        whereClause.status = status.toUpperCase();
+      }
+
+      if (credited === "true") {
+        whereClause.credited = true;
+      } else if (credited === "false") {
+        whereClause.credited = false;
+      }
+
       const topups = await prisma.topUp.findMany({
-        where: { userId: user.id },
+        where: whereClause,
         orderBy: { createdAt: "desc" },
-        take: Number(limit)
+        take: limit ? Number(limit) : undefined
       });
+
+      // Статистика
+      const successfulTopups = topups.filter(t => t.status === "SUCCESS" && t.credited);
+      const totalAmount = successfulTopups.reduce((sum, t) => sum + t.amount, 0);
 
       res.json({
         ok: true,
         data: topups.map(t => ({
           id: t.id,
           orderId: t.orderId,
+          billId: t.billId,
           amount: t.amount,
           status: t.status,
           credited: t.credited,
-          createdAt: t.createdAt
-        }))
+          createdAt: t.createdAt,
+          creditedAt: t.creditedAt,
+          updatedAt: t.updatedAt
+        })),
+        stats: {
+          total: topups.length,
+          successful: successfulTopups.length,
+          totalAmount: totalAmount
+        }
       });
     } catch (error) {
       console.error("[WEBAPP] Get topups error:", error);
