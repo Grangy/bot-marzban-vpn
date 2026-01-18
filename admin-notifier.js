@@ -287,6 +287,94 @@ function initAdminNotifier(bot) {
     await sendStats(chatId);
   });
 
+  // Команда /createpromo <сумма> - создать промокод на баланс
+  bot.command("createpromo", async (ctx) => {
+    const chatId = String(ctx.chat.id);
+    
+    // Проверяем, что команда из админ-группы
+    if (chatId !== ADMIN_GROUP_ID) {
+      return; // Игнорируем команду из других чатов
+    }
+    
+    const text = ctx.message?.text || "";
+    const match = text.match(/^\/createpromo\s+(\d+)$/);
+    
+    if (!match) {
+      return ctx.reply("❌ Использование: /createpromo <сумма>\n\nПример: /createpromo 500");
+    }
+    
+    const amount = parseInt(match[1], 10);
+    
+    if (amount < 1 || amount > 100000) {
+      return ctx.reply("❌ Сумма должна быть от 1 до 100000 ₽");
+    }
+    
+    try {
+      // Генерируем уникальный код
+      const crypto = require("crypto");
+      const code = "GIFT" + crypto.randomBytes(4).toString("hex").toUpperCase();
+      
+      // Создаём промокод в БД
+      await prisma.adminPromo.create({
+        data: {
+          code,
+          amount,
+          createdBy: String(ctx.from?.id || "unknown"),
+        },
+      });
+      
+      const msg = `✅ <b>Промокод создан!</b>
+
+🎁 Код: <code>${code}</code>
+💵 Номинал: <b>${ruMoney(amount)}</b>
+
+📋 Для активации пользователь должен ввести:
+<code>/promo ${code}</code>
+
+⚠️ Код одноразовый, после использования станет недействительным.`;
+      
+      await ctx.reply(msg, { parse_mode: "HTML" });
+      console.log(`[ADMIN] Created promo code ${code} for ${amount}₽ by ${ctx.from?.id}`);
+    } catch (err) {
+      console.error("[ADMIN] Error creating promo:", err);
+      await ctx.reply("❌ Ошибка создания промокода: " + err.message);
+    }
+  });
+
+  // Команда /promos - список активных промокодов
+  bot.command("promos", async (ctx) => {
+    const chatId = String(ctx.chat.id);
+    
+    if (chatId !== ADMIN_GROUP_ID) {
+      return;
+    }
+    
+    try {
+      const promos = await prisma.adminPromo.findMany({
+        where: { usedById: null },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      });
+      
+      if (promos.length === 0) {
+        return ctx.reply("📭 Нет активных промокодов");
+      }
+      
+      let msg = "🎁 <b>Активные промокоды:</b>\n\n";
+      
+      for (const p of promos) {
+        msg += `<code>${p.code}</code> — ${ruMoney(p.amount)}\n`;
+      }
+      
+      msg += `\n📊 Всего: ${promos.length}`;
+      
+      await ctx.reply(msg, { parse_mode: "HTML" });
+    } catch (err) {
+      console.error("[ADMIN] Error listing promos:", err);
+      await ctx.reply("❌ Ошибка: " + err.message);
+    }
+  });
+
   // Уведомление о успешном пополнении
   bus.on("topup.success", async ({ topupId }) => {
     try {

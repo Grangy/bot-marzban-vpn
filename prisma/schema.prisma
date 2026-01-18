@@ -87,4 +87,17 @@ model TopUp {
   @@index([userId, createdAt])
 }
 
+// Админские промокоды на баланс
+model AdminPromo {
+  id         Int      @id @default(autoincrement())
+  code       String   @unique              // уникальный код промокода
+  amount     Int                           // номинал в рублях
+  usedById   Int?                          // кто использовал (null = не использован)
+  usedAt     DateTime?                     // когда использован
+  createdAt  DateTime @default(now())
+  createdBy  String?                       // кто создал (telegram id админа)
+  
+  @@index([code])
+}
+
 

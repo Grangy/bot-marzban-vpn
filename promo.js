@@ -11,15 +11,82 @@ const { createMarzbanUserOnBothServers } = require("./marzban-utils");
 // Хранилище пользователей, ожидающих ввода промокода (chatId -> true)
 const waitingForPromoCode = new Set();
 
+// Функция для активации админского промокода на баланс
+async function activateAdminPromo(ctx, code) {
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // Ищем промокод
+      const promo = await tx.adminPromo.findUnique({
+        where: { code },
+      });
+      
+      if (!promo) {
+        return { ok: false, reason: "NOT_FOUND" };
+      }
+      
+      if (promo.usedById) {
+        return { ok: false, reason: "ALREADY_USED" };
+      }
+      
+      // Помечаем промокод как использованный
+      await tx.adminPromo.update({
+        where: { id: promo.id },
+        data: {
+          usedById: ctx.dbUser.id,
+          usedAt: new Date(),
+        },
+      });
+      
+      // Начисляем баланс пользователю
+      await tx.user.update({
+        where: { id: ctx.dbUser.id },
+        data: {
+          balance: { increment: promo.amount },
+        },
+      });
+      
+      return { ok: true, amount: promo.amount };
+    });
+    
+    if (!result.ok) {
+      if (result.reason === "NOT_FOUND") {
+        return { ok: false, message: "❌ Такой промокод не найден." };
+      }
+      if (result.reason === "ALREADY_USED") {
+        return { ok: false, message: "❌ Этот промокод уже был использован." };
+      }
+      return { ok: false, message: "❌ Не удалось активировать промокод." };
+    }
+    
+    // Получаем обновленный баланс
+    const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+    
+    return {
+      ok: true,
+      message: `🎉 Промокод активирован!\n\n💵 Начислено: ${ruMoney(result.amount)}\n💳 Ваш баланс: ${ruMoney(user.balance)}\n\nТеперь вы можете купить подписку в разделе "🛒 Купить подписку"`,
+    };
+  } catch (e) {
+    console.error("[PROMO] Admin promo error:", e);
+    return { ok: false, message: "Ошибка при активации промокода. Попробуйте позже." };
+  }
+}
+
 // Функция для активации промокода (вынесена для переиспользования)
 async function activatePromoCode(ctx, inputCode) {
   try {
+    const upperCode = inputCode.toUpperCase();
+    
+    // Сначала проверяем, не админский ли это промокод (GIFT...)
+    if (upperCode.startsWith("GIFT")) {
+      return await activateAdminPromo(ctx, upperCode);
+    }
+    
     const result = await prisma.$transaction(async (tx) => {
       const me = await tx.user.findUnique({ where: { id: ctx.dbUser.id } });
 
       // код должен существовать
       const owner = await tx.user.findUnique({
-        where: { promoCode: inputCode.toUpperCase() },
+        where: { promoCode: upperCode },
       });
       if (!owner) return { ok: false, reason: "NOT_FOUND" };
 
