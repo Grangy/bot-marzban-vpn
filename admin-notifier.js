@@ -56,25 +56,41 @@ async function getExtendedStats(startDate, endDate) {
   
   // Уникальные пользователи, которые пополняли
   const uniqueUsers = new Set(topups.map(t => t.userId)).size;
-  
-  // Максимальное пополнение
-  const maxTopup = topups.length > 0 ? Math.max(...topups.map(t => t.amount)) : 0;
-  
-  // Распределение по суммам
-  const distribution = {
-    small: topups.filter(t => t.amount <= 200).length,      // до 200₽
-    medium: topups.filter(t => t.amount > 200 && t.amount <= 500).length,  // 200-500₽
-    large: topups.filter(t => t.amount > 500).length,       // более 500₽
-  };
 
   return { 
     count, 
     totalAmount, 
     avgAmount, 
-    uniqueUsers, 
-    maxTopup,
-    distribution 
+    uniqueUsers,
   };
+}
+
+/**
+ * Получить статистику купленных подписок за период
+ */
+async function getSubscriptionStats(startDate, endDate) {
+  // Подписки созданные за период (кроме FREE и PROMO)
+  const subscriptions = await prisma.subscription.findMany({
+    where: {
+      type: { notIn: ["FREE", "PROMO"] },
+      createdAt: {
+        gte: startDate,
+        lte: endDate,
+      },
+    },
+  });
+
+  // Распределение по типам подписок
+  const distribution = {
+    M1: subscriptions.filter(s => s.type === "M1").length,
+    M3: subscriptions.filter(s => s.type === "M3").length,
+    M6: subscriptions.filter(s => s.type === "M6").length,
+    M12: subscriptions.filter(s => s.type === "M12").length,
+  };
+
+  const total = subscriptions.length;
+
+  return { distribution, total };
 }
 
 /**
@@ -161,6 +177,18 @@ async function getMonthStats() {
 }
 
 /**
+ * Получить статистику подписок за неделю
+ */
+async function getWeekSubscriptionStats() {
+  const now = new Date();
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - 7);
+  startOfWeek.setHours(0, 0, 0, 0);
+  
+  return getSubscriptionStats(startOfWeek, now);
+}
+
+/**
  * Сформировать красивый текст статистики
  */
 async function generateStatsMessage() {
@@ -168,6 +196,7 @@ async function generateStatsMessage() {
   const weekStats = await getWeekStats();
   const monthStats = await getMonthStats();
   const userStats = await getUserStats();
+  const weekSubStats = await getWeekSubscriptionStats();
 
   const text = `📊 <b>Статистика MaxGroot VPN</b>
 
@@ -185,8 +214,7 @@ async function generateStatsMessage() {
 ├ 💵 Сумма: <b>${ruMoney(weekStats.totalAmount)}</b>
 ├ 📝 Транзакций: ${weekStats.count}
 ├ 👥 Уникальных: ${weekStats.uniqueUsers}
-├ 📈 Средний чек: ${ruMoney(weekStats.avgAmount)}
-└ 🏆 Макс. пополнение: ${ruMoney(weekStats.maxTopup)}
+└ 📈 Средний чек: ${ruMoney(weekStats.avgAmount)}
 
 📅 <b>За 30 дней:</b>
 ├ 💵 Сумма: <b>${ruMoney(monthStats.totalAmount)}</b>
@@ -207,10 +235,12 @@ async function generateStatsMessage() {
 
 ━━━━━━━━━━━━━━━━━━━━
 
-📊 <b>Распределение (7 дней):</b>
-├ 🟢 до 200₽: ${weekStats.distribution.small}
-├ 🟡 200-500₽: ${weekStats.distribution.medium}
-└ 🔴 более 500₽: ${weekStats.distribution.large}
+📦 <b>Купленные подписки (7 дней):</b>
+├ 📅 1 месяц: ${weekSubStats.distribution.M1}
+├ 📆 3 месяца: ${weekSubStats.distribution.M3}
+├ 🗓 6 месяцев: ${weekSubStats.distribution.M6}
+├ 📅 12 месяцев: ${weekSubStats.distribution.M12}
+└ 📊 Всего: <b>${weekSubStats.total}</b>
 
 ⏰ <i>${formatDate(new Date())}</i>`;
 
