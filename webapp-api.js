@@ -164,6 +164,27 @@ function registerWebAppAPI(app) {
       const successfulTopups = user.topUps.filter(t => t.status === "SUCCESS" && t.credited);
       const totalTopupAmount = successfulTopups.reduce((sum, t) => sum + t.amount, 0);
 
+      // Получаем актуальный баланс повторным запросом (для проверки кеширования)
+      const userFresh = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { balance: true, updatedAt: true }
+      });
+
+      // Вычисляем баланс из транзакций для проверки
+      const paidSubscriptions = user.subscriptions.filter(s => ["M1", "M3", "M6", "M12"].includes(s.type));
+      const totalSpent = paidSubscriptions.reduce((sum, sub) => {
+        const plan = PLANS[sub.type];
+        return sum + (plan ? plan.price : 0);
+      }, 0);
+
+      const promoBonusReceived = user.promoActivationsAsOwner.reduce((sum, a) => sum + a.amount, 0);
+      const adminPromos = await prisma.adminPromo.findMany({
+        where: { usedById: user.id },
+        select: { amount: true }
+      });
+      const adminPromoBonus = adminPromos.reduce((sum, p) => sum + p.amount, 0);
+      const calculatedBalance = totalTopupAmount + promoBonusReceived + adminPromoBonus - totalSpent;
+
       // Форматируем данные для ответа
       const response = {
         ok: true,
@@ -173,7 +194,11 @@ function registerWebAppAPI(app) {
           telegramId: user.telegramId,
           chatId: user.chatId,
           username: user.accountName,
-          balance: user.balance,
+          balance: Number(user.balance),
+          balanceFresh: userFresh ? Number(userFresh.balance) : null,
+          balanceLastUpdated: userFresh?.updatedAt || user.updatedAt,
+          balanceCalculated: calculatedBalance,
+          balanceMatches: Number(user.balance) === calculatedBalance,
           promoCode: user.promoCode,
           createdAt: user.createdAt,
           updatedAt: user.updatedAt,
@@ -186,7 +211,11 @@ function registerWebAppAPI(app) {
             totalTopups: user.topUps.length,
             successfulTopups: successfulTopups.length,
             totalTopupAmount: totalTopupAmount,
-            totalSpent: totalTopupAmount - user.balance,
+            totalSpentOnSubscriptions: totalSpent,
+            totalSpentOnSubscriptions: totalSpent,
+            totalSpent: totalTopupAmount - Number(user.balance),
+            calculatedBalance: calculatedBalance,
+            balanceDiscrepancy: Number(user.balance) - calculatedBalance,
             promoCodeGiven: user.promoCode ? 1 : 0,
             promoActivationsReceived: user.promoActivationsAsOwner.length,
             promoActivated: user.promoActivationAsUser ? 1 : 0
@@ -262,15 +291,16 @@ function registerWebAppAPI(app) {
 
   /**
    * GET /api/user/:telegramId/balance
-   * Получить баланс пользователя
+   * Получить баланс пользователя (с проверкой через транзакции)
    */
   app.get("/api/user/:telegramId/balance", async (req, res) => {
     try {
       const { telegramId } = req.params;
       
+      // Получаем пользователя через Prisma
       const user = await prisma.user.findFirst({
         where: { telegramId: String(telegramId) },
-        select: { id: true, balance: true }
+        select: { id: true, balance: true, telegramId: true }
       });
 
       if (!user) {
@@ -280,13 +310,77 @@ function registerWebAppAPI(app) {
         });
       }
 
+      // Проверяем баланс через транзакции для диагностики
+      const successfulTopups = await prisma.topUp.findMany({
+        where: { 
+          userId: user.id, 
+          status: "SUCCESS",
+          credited: true
+        },
+        select: { amount: true, createdAt: true }
+      });
+
+      const totalTopupAmount = successfulTopups.reduce((sum, t) => sum + t.amount, 0);
+
+      // Получаем все покупки подписок для расчета потраченных средств
+      const paidSubscriptions = await prisma.subscription.findMany({
+        where: { 
+          userId: user.id,
+          type: { in: ["M1", "M3", "M6", "M12"] }
+        },
+        select: { type: true }
+      });
+
+      // Считаем сколько потрачено на подписки
+      const PLANS = require("./menus").PLANS;
+      const totalSpent = paidSubscriptions.reduce((sum, sub) => {
+        const plan = PLANS[sub.type];
+        return sum + (plan ? plan.price : 0);
+      }, 0);
+
+      // Получаем промо-активации (если пользователь получил бонус от своих промокодов)
+      const promoActivations = await prisma.promoActivation.findMany({
+        where: { codeOwnerId: user.id },
+        select: { amount: true }
+      });
+      const promoBonusReceived = promoActivations.reduce((sum, a) => sum + a.amount, 0);
+
+      // Получаем админские промокоды (если использовал)
+      const adminPromos = await prisma.adminPromo.findMany({
+        where: { usedById: user.id },
+        select: { amount: true }
+      });
+      const adminPromoBonus = adminPromos.reduce((sum, p) => sum + p.amount, 0);
+
+      // Получаем актуальный баланс повторным запросом для проверки кеширования
+      const userFresh = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { balance: true }
+      });
+
+      // Вычисляем баланс из транзакций (для проверки)
+      const calculatedBalance = totalTopupAmount + promoBonusReceived + adminPromoBonus - totalSpent;
+
       res.json({
         ok: true,
-        data: { balance: user.balance }
+        data: { 
+          balance: Number(user.balance),
+          balanceFresh: userFresh ? Number(userFresh.balance) : null,
+          diagnostics: {
+            totalTopupsCredited: totalTopupAmount,
+            successfulTopupsCount: successfulTopups.length,
+            totalSpentOnSubscriptions: totalSpent,
+            promoBonusReceived: promoBonusReceived,
+            adminPromoBonus: adminPromoBonus,
+            calculatedBalance: calculatedBalance,
+            balanceMatchesCalculation: Number(user.balance) === calculatedBalance,
+            balanceMatchesFresh: Number(user.balance) === Number(userFresh?.balance || 0)
+          }
+        }
       });
     } catch (error) {
       console.error("[WEBAPP] Get balance error:", error);
-      res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+      res.status(500).json({ ok: false, error: "SERVER_ERROR", message: error.message });
     }
   });
 
@@ -889,6 +983,133 @@ function registerWebAppAPI(app) {
     } catch (error) {
       console.error("[WEBAPP] Get subscription error:", error);
       res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    }
+  });
+
+  /**
+   * GET /api/user/:telegramId/balance/debug
+   * Диагностика баланса (детальная информация)
+   */
+  app.get("/api/user/:telegramId/balance/debug", async (req, res) => {
+    try {
+      const { telegramId } = req.params;
+      
+      const user = await prisma.user.findFirst({
+        where: { telegramId: String(telegramId) },
+        select: { 
+          id: true, 
+          balance: true, 
+          telegramId: true,
+          accountName: true,
+          updatedAt: true
+        }
+      });
+
+      if (!user) {
+        return res.status(404).json({ 
+          ok: false, 
+          error: "USER_NOT_FOUND" 
+        });
+      }
+
+      // Все успешные пополнения
+      const topups = await prisma.topUp.findMany({
+        where: { 
+          userId: user.id,
+          status: "SUCCESS",
+          credited: true
+        },
+        orderBy: { creditedAt: "desc" }
+      });
+
+      // Все подписки (платные)
+      const subscriptions = await prisma.subscription.findMany({
+        where: { 
+          userId: user.id,
+          type: { in: ["M1", "M3", "M6", "M12"] }
+        },
+        orderBy: { startDate: "desc" }
+      });
+
+      // Промо-бонусы полученные
+      const promoActivations = await prisma.promoActivation.findMany({
+        where: { codeOwnerId: user.id },
+        include: {
+          activator: {
+            select: { telegramId: true, accountName: true }
+          }
+        },
+        orderBy: { createdAt: "desc" }
+      });
+
+      // Админские промокоды использованные
+      const adminPromos = await prisma.adminPromo.findMany({
+        where: { usedById: user.id },
+        orderBy: { usedAt: "desc" }
+      });
+
+      // Расчет баланса
+      const totalTopups = topups.reduce((sum, t) => sum + t.amount, 0);
+      const totalSpent = subscriptions.reduce((sum, s) => {
+        const plan = PLANS[s.type];
+        return sum + (plan ? plan.price : 0);
+      }, 0);
+      const promoBonus = promoActivations.reduce((sum, a) => sum + a.amount, 0);
+      const adminBonus = adminPromos.reduce((sum, p) => sum + p.amount, 0);
+      const calculatedBalance = totalTopups + promoBonus + adminBonus - totalSpent;
+
+      res.json({
+        ok: true,
+        data: {
+          user: {
+            id: user.id,
+            telegramId: user.telegramId,
+            username: user.accountName,
+            currentBalance: Number(user.balance),
+            calculatedBalance: calculatedBalance,
+            discrepancy: Number(user.balance) - calculatedBalance,
+            lastUpdated: user.updatedAt
+          },
+          transactions: {
+            topups: topups.map(t => ({
+              id: t.id,
+              amount: t.amount,
+              creditedAt: t.creditedAt,
+              orderId: t.orderId
+            })),
+            subscriptions: subscriptions.map(s => ({
+              id: s.id,
+              type: s.type,
+              price: PLANS[s.type]?.price || 0,
+              startDate: s.startDate
+            })),
+            promoActivations: promoActivations.map(a => ({
+              id: a.id,
+              amount: a.amount,
+              createdAt: a.createdAt,
+              activator: a.activator
+            })),
+            adminPromos: adminPromos.map(p => ({
+              id: p.id,
+              code: p.code,
+              amount: p.amount,
+              usedAt: p.usedAt
+            }))
+          },
+          summary: {
+            totalTopups: totalTopups,
+            totalSpent: totalSpent,
+            promoBonus: promoBonus,
+            adminBonus: adminBonus,
+            calculatedBalance: calculatedBalance,
+            currentBalance: Number(user.balance),
+            balanceMatches: Number(user.balance) === calculatedBalance
+          }
+        }
+      });
+    } catch (error) {
+      console.error("[WEBAPP] Balance debug error:", error);
+      res.status(500).json({ ok: false, error: "SERVER_ERROR", message: error.message });
     }
   });
 
