@@ -145,7 +145,11 @@ function getVideoFileForDevice(deviceType) {
   if (deviceType === 'macos') {
     return 'IMG_1023.MOV';
   }
-  // Windows использует IMG_1019.mp4
+  // Windows использует IMG_1024.mp4
+  if (deviceType === 'windows') {
+    return 'IMG_1024.mp4';
+  }
+  // По умолчанию IMG_1019.mp4
   return 'IMG_1019.mp4';
 }
 
