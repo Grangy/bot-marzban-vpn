@@ -19,3 +19,5 @@ all.js
 token.json
 # Google Sheets service account key
 table-484713-7d2b62fb7e2e.json
+# Конфиденциальная документация с ключами
+API_DOCUMENTATION.md
