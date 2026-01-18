@@ -1,10 +1,20 @@
 // server.js
 const express = require("express");
 const bodyParser = require("body-parser");
+const cors = require("cors");
 const { handlePostback, markTopupSuccessAndCredit, markTopupFailed } = require("./payment");
+const { registerWebAppAPI } = require("./webapp-api");
 
 function createServer() {
   const app = express();
+  
+  // CORS для Web App
+  app.use(cors({
+    origin: "*", // В продакшене указать конкретные домены
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "X-Webapp-Secret", "X-Telegram-Init-Data"]
+  }));
+  
   app.use(bodyParser.json());
   app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -139,6 +149,9 @@ function createServer() {
       </html>
     `);
   });
+
+  // Регистрируем Web App API
+  registerWebAppAPI(app);
 
   return app;
 }
