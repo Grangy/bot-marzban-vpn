@@ -9,12 +9,13 @@ const ADMIN_GROUP_ID = "-5184781938";
 let botInstance = null;
 
 /**
- * Форматирование даты
+ * Форматирование даты (МСК)
  */
 function formatDate(date) {
-  const d = new Date(date);
+  // Конвертируем в московское время (UTC+3)
+  const mskDate = new Date(date.getTime() + 3 * 60 * 60 * 1000);
   const pad = (n) => String(n).padStart(2, "0");
-  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${pad(mskDate.getUTCDate())}.${pad(mskDate.getUTCMonth() + 1)}.${mskDate.getUTCFullYear()} ${pad(mskDate.getUTCHours())}:${pad(mskDate.getUTCMinutes())} МСК`;
 }
 
 /**
@@ -177,15 +178,14 @@ async function getMonthStats() {
 }
 
 /**
- * Получить статистику подписок за неделю
+ * Получить статистику подписок за всё время
  */
-async function getWeekSubscriptionStats() {
+async function getAllTimeSubscriptionStats() {
+  // Начало времён - 2020 год
+  const startDate = new Date(2020, 0, 1);
   const now = new Date();
-  const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - 7);
-  startOfWeek.setHours(0, 0, 0, 0);
   
-  return getSubscriptionStats(startOfWeek, now);
+  return getSubscriptionStats(startDate, now);
 }
 
 /**
@@ -196,7 +196,7 @@ async function generateStatsMessage() {
   const weekStats = await getWeekStats();
   const monthStats = await getMonthStats();
   const userStats = await getUserStats();
-  const weekSubStats = await getWeekSubscriptionStats();
+  const allTimeSubStats = await getAllTimeSubscriptionStats();
 
   const text = `📊 <b>Статистика MaxGroot VPN</b>
 
@@ -235,12 +235,12 @@ async function generateStatsMessage() {
 
 ━━━━━━━━━━
 
-📦 <b>Купленные подписки (7 дней):</b>
-├ 📅 1 месяц: ${weekSubStats.distribution.M1}
-├ 📆 3 месяца: ${weekSubStats.distribution.M3}
-├ 🗓 6 месяцев: ${weekSubStats.distribution.M6}
-├ 📅 12 месяцев: ${weekSubStats.distribution.M12}
-└ 📊 Всего: <b>${weekSubStats.total}</b>
+📦 <b>Купленные подписки:</b>
+├ 📅 1 месяц: ${allTimeSubStats.distribution.M1}
+├ 📆 3 месяца: ${allTimeSubStats.distribution.M3}
+├ 🗓 6 месяцев: ${allTimeSubStats.distribution.M6}
+├ 📅 12 месяцев: ${allTimeSubStats.distribution.M12}
+└ 📊 Всего: <b>${allTimeSubStats.total}</b>
 
 ⏰ <i>${formatDate(new Date())}</i>`;
 
