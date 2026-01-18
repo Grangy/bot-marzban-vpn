@@ -20,25 +20,43 @@ async function mergeUsersByTelegramId(telegramId) {
   }
 
   try {
+    const telegramIdStr = String(telegramId);
+    
     // 1. Находим всех пользователей с таким telegramId
-    const users = await prisma.user.findMany({
-      where: { telegramId: String(telegramId) },
+    const allUsers = await prisma.user.findMany({
+      where: { telegramId: telegramIdStr },
       include: {
         subscriptions: true,
         topUps: true,
         promoActivationsAsOwner: true,
         promoActivationAsUser: true
       },
-      orderBy: { id: "asc" } // Самый старый будет основным
+      orderBy: { id: "asc" }
     });
 
+    // 2. Фильтруем только пользователей из ЛС (chatId === telegramId)
+    const users = allUsers.filter(u => u.chatId === telegramIdStr);
+
+    if (allUsers.length > users.length) {
+      const groupUsers = allUsers.filter(u => u.chatId !== telegramIdStr);
+      console.log(`ℹ️  Найдено ${groupUsers.length} записей из групп/чатов (будут проигнорированы):`);
+      groupUsers.forEach(u => {
+        console.log(`   - ID: ${u.id}, Chat ID: ${u.chatId} (группа/чат)`);
+      });
+    }
+
     if (users.length === 0) {
-      console.log("❌ Пользователь не найден");
+      if (allUsers.length > 0) {
+        console.log("⚠️  Пользователь найден только в группах/чатах, не в ЛС!");
+        console.log("   Объединение невозможно - нет пользователя из личных сообщений.");
+      } else {
+        console.log("❌ Пользователь не найден");
+      }
       return;
     }
 
     if (users.length === 1) {
-      console.log("✅ Найден только один пользователь, объединение не требуется");
+      console.log("✅ Найден только один пользователь из ЛС, объединение не требуется");
       return;
     }
 

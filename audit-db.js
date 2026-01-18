@@ -10,21 +10,48 @@ async function auditUser(telegramId) {
   console.log("=".repeat(80));
 
   try {
-    // 1. Проверяем сколько пользователей с таким telegramId
-    const users = await prisma.user.findMany({
-      where: { telegramId: String(telegramId) },
+    const telegramIdStr = String(telegramId);
+    
+    // 1. Сначала ищем пользователя только из ЛС (chatId === telegramId)
+    const privateChatUser = await prisma.user.findFirst({
+      where: { 
+        telegramId: telegramIdStr,
+        chatId: telegramIdStr // Только личные сообщения
+      },
       orderBy: { id: "asc" }
     });
 
-    console.log(`\n📊 НАЙДЕНО ПОЛЬЗОВАТЕЛЕЙ С telegramId ${telegramId}: ${users.length}`);
+    // 2. Находим всех пользователей с таким telegramId (включая группы)
+    const allUsers = await prisma.user.findMany({
+      where: { telegramId: telegramIdStr },
+      orderBy: { id: "asc" }
+    });
+
+    // 3. Фильтруем только пользователей из ЛС
+    const users = allUsers.filter(u => u.chatId === telegramIdStr);
+
+    console.log(`\n📊 НАЙДЕНО ПОЛЬЗОВАТЕЛЕЙ ИЗ ЛС С telegramId ${telegramId}: ${users.length}`);
+    
+    if (allUsers.length > users.length) {
+      const groupUsers = allUsers.filter(u => u.chatId !== telegramIdStr);
+      console.log(`ℹ️  Также найдено ${groupUsers.length} записей из групп/чатов (игнорируются):`);
+      groupUsers.forEach(u => {
+        console.log(`   - ID: ${u.id}, Chat ID: ${u.chatId} (группа/чат)`);
+      });
+    }
 
     if (users.length === 0) {
-      console.log("❌ Пользователь не найден в БД!");
+      if (allUsers.length > 0) {
+        console.log("⚠️  Пользователь найден только в группах/чатах, не в ЛС!");
+        console.log("   Это означает, что пользователь никогда не писал боту в личные сообщения.");
+      } else {
+        console.log("❌ Пользователь не найден в БД!");
+      }
       return;
     }
 
     if (users.length > 1) {
-      console.log(`⚠️  ВНИМАНИЕ: Найдено ${users.length} пользователей с одним telegramId!`);
+      console.log(`⚠️  ВНИМАНИЕ: Найдено ${users.length} пользователей из ЛС с одним telegramId!`);
       console.log("Это может быть причиной проблем с балансом.");
     }
 

@@ -98,11 +98,19 @@ function registerWebAppAPI(app) {
 
   /**
    * Вспомогательная функция для получения правильного пользователя
-   * Если есть дубликаты - выбирает того, у кого больше активности
+   * Ищет пользователя только из личных сообщений (chatId === telegramId)
+   * Игнорирует пользователей из групп и каналов
    */
   async function getMainUser(telegramId) {
-    const users = await prisma.user.findMany({
-      where: { telegramId: String(telegramId) },
+    const telegramIdStr = String(telegramId);
+    
+    // Ищем пользователя только из личных сообщений (chatId === telegramId)
+    // В ЛС chat.id всегда равен user.id (telegramId)
+    const user = await prisma.user.findFirst({
+      where: { 
+        telegramId: telegramIdStr,
+        chatId: telegramIdStr // Только ЛС, не группы
+      },
       include: {
         subscriptions: { select: { id: true } },
         topUps: { select: { id: true } }
@@ -110,22 +118,36 @@ function registerWebAppAPI(app) {
       orderBy: { id: "asc" } // Самый старый - основной
     });
 
-    if (users.length === 0) {
+    if (user) {
+      return user;
+    }
+
+    // Если не нашли пользователя из ЛС, ищем вообще всех (fallback для диагностики)
+    const allUsers = await prisma.user.findMany({
+      where: { telegramId: telegramIdStr },
+      include: {
+        subscriptions: { select: { id: true } },
+        topUps: { select: { id: true } }
+      },
+      orderBy: { id: "asc" }
+    });
+
+    if (allUsers.length === 0) {
       return null;
     }
 
-    if (users.length === 1) {
-      return users[0];
+    // Если нашли пользователей, но не из ЛС - предупреждаем
+    const nonPrivateUsers = allUsers.filter(u => u.chatId !== telegramIdStr);
+    if (nonPrivateUsers.length > 0) {
+      console.warn(`[WEBAPP] Пользователь ${telegramId} найден только в группах/чатах, не в ЛС. Chat IDs: ${nonPrivateUsers.map(u => u.chatId).join(", ")}`);
     }
 
-    // Если есть дубликаты - выбираем того, у кого больше активности
-    // Подсчитываем активность: баланс + количество подписок + количество пополнений
-    const usersWithActivity = users.map(user => ({
+    // Fallback: выбираем того, у кого больше активности
+    const usersWithActivity = allUsers.map(user => ({
       user,
       activity: user.balance + (user.subscriptions.length * 10) + user.topUps.length
     }));
 
-    // Сортируем по активности (по убыванию), затем по ID (по возрастанию - самый старый)
     usersWithActivity.sort((a, b) => {
       if (b.activity !== a.activity) {
         return b.activity - a.activity;
@@ -133,14 +155,7 @@ function registerWebAppAPI(app) {
       return a.user.id - b.user.id;
     });
 
-    const mainUser = usersWithActivity[0].user;
-
-    // Логируем предупреждение если есть дубликаты
-    if (users.length > 1) {
-      console.warn(`[WEBAPP] Найдено ${users.length} пользователей с telegramId ${telegramId}, используется ID ${mainUser.id}`);
-    }
-
-    return mainUser;
+    return usersWithActivity[0].user;
   }
 
   /**
@@ -1106,9 +1121,11 @@ function registerWebAppAPI(app) {
   app.get("/api/user/:telegramId/duplicates", async (req, res) => {
     try {
       const { telegramId } = req.params;
+      const telegramIdStr = String(telegramId);
       
-      const users = await prisma.user.findMany({
-        where: { telegramId: String(telegramId) },
+      // Ищем всех пользователей
+      const allUsers = await prisma.user.findMany({
+        where: { telegramId: telegramIdStr },
         include: {
           subscriptions: { select: { id: true } },
           topUps: { select: { id: true } }
@@ -1116,10 +1133,26 @@ function registerWebAppAPI(app) {
         orderBy: { id: "asc" }
       });
 
-      if (users.length === 0) {
+      // Фильтруем только пользователей из ЛС (chatId === telegramId)
+      const users = allUsers.filter(u => u.chatId === telegramIdStr);
+      const groupUsers = allUsers.filter(u => u.chatId !== telegramIdStr);
+
+      if (users.length === 0 && allUsers.length === 0) {
         return res.status(404).json({ 
           ok: false, 
           error: "USER_NOT_FOUND" 
+        });
+      }
+
+      if (users.length === 0 && groupUsers.length > 0) {
+        return res.status(404).json({
+          ok: false,
+          error: "USER_NOT_FOUND_IN_PRIVATE",
+          message: "Пользователь найден только в группах/чатах, не в личных сообщениях",
+          data: {
+            groupUsers: groupUsers.length,
+            totalUsers: allUsers.length
+          }
         });
       }
 
@@ -1145,11 +1178,22 @@ function registerWebAppAPI(app) {
         ok: true,
         data: {
           totalUsers: users.length,
+          totalGroupUsers: groupUsers.length,
           hasDuplicates: users.length > 1,
           mainUser: mainUser,
           allUsers: usersData,
+          groupUsers: groupUsers.map(u => ({
+            id: u.id,
+            chatId: u.chatId,
+            username: u.accountName,
+            balance: u.balance,
+            subscriptionsCount: u.subscriptions.length,
+            topupsCount: u.topUps.length
+          })),
           recommendation: users.length > 1 
-            ? "Обнаружены дубликаты пользователя. Рекомендуется объединить данные."
+            ? "Обнаружены дубликаты пользователя в ЛС. Рекомендуется объединить данные."
+            : groupUsers.length > 0
+            ? `Пользователь найден в ${groupUsers.length} группе(ах), но не в ЛС. Записи из групп игнорируются.`
             : "Дубликатов не найдено."
         }
       });
