@@ -34,9 +34,10 @@ async function sendToAdminGroup(text) {
 }
 
 /**
- * Получить статистику за период
+ * Получить расширенную статистику за период
  */
-async function getStats(startDate, endDate) {
+async function getExtendedStats(startDate, endDate) {
+  // Успешные пополнения
   const topups = await prisma.topUp.findMany({
     where: {
       status: "SUCCESS",
@@ -46,12 +47,82 @@ async function getStats(startDate, endDate) {
         lte: endDate,
       },
     },
+    include: { user: true },
   });
 
   const totalAmount = topups.reduce((sum, t) => sum + t.amount, 0);
   const count = topups.length;
+  const avgAmount = count > 0 ? Math.round(totalAmount / count) : 0;
+  
+  // Уникальные пользователи, которые пополняли
+  const uniqueUsers = new Set(topups.map(t => t.userId)).size;
+  
+  // Максимальное пополнение
+  const maxTopup = topups.length > 0 ? Math.max(...topups.map(t => t.amount)) : 0;
+  
+  // Распределение по суммам
+  const distribution = {
+    small: topups.filter(t => t.amount <= 200).length,      // до 200₽
+    medium: topups.filter(t => t.amount > 200 && t.amount <= 500).length,  // 200-500₽
+    large: topups.filter(t => t.amount > 500).length,       // более 500₽
+  };
 
-  return { count, totalAmount };
+  return { 
+    count, 
+    totalAmount, 
+    avgAmount, 
+    uniqueUsers, 
+    maxTopup,
+    distribution 
+  };
+}
+
+/**
+ * Получить статистику пользователей
+ */
+async function getUserStats() {
+  const totalUsers = await prisma.user.count();
+  
+  // Пользователи с балансом > 0
+  const usersWithBalance = await prisma.user.count({
+    where: { balance: { gt: 0 } },
+  });
+  
+  // Общий баланс всех пользователей
+  const balanceSum = await prisma.user.aggregate({
+    _sum: { balance: true },
+  });
+  
+  // Активные подписки (не FREE и не истекшие)
+  const activeSubscriptions = await prisma.subscription.count({
+    where: {
+      type: { not: "FREE" },
+      endDate: { gt: new Date() },
+    },
+  });
+  
+  // Новые пользователи за сегодня
+  const today = new Date();
+  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
+  const newUsersToday = await prisma.user.count({
+    where: { createdAt: { gte: startOfDay } },
+  });
+  
+  // Новые пользователи за неделю
+  const weekAgo = new Date(today);
+  weekAgo.setDate(today.getDate() - 7);
+  const newUsersWeek = await prisma.user.count({
+    where: { createdAt: { gte: weekAgo } },
+  });
+
+  return {
+    totalUsers,
+    usersWithBalance,
+    totalBalance: balanceSum._sum.balance || 0,
+    activeSubscriptions,
+    newUsersToday,
+    newUsersWeek,
+  };
 }
 
 /**
@@ -62,7 +133,7 @@ async function getTodayStats() {
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
   const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
   
-  return getStats(startOfDay, endOfDay);
+  return getExtendedStats(startOfDay, endOfDay);
 }
 
 /**
@@ -74,31 +145,94 @@ async function getWeekStats() {
   startOfWeek.setDate(now.getDate() - 7);
   startOfWeek.setHours(0, 0, 0, 0);
   
-  return getStats(startOfWeek, now);
+  return getExtendedStats(startOfWeek, now);
 }
 
 /**
- * Отправить ежедневную статистику
+ * Получить статистику за месяц
  */
-async function sendDailyStats() {
-  try {
-    const todayStats = await getTodayStats();
-    const weekStats = await getWeekStats();
+async function getMonthStats() {
+  const now = new Date();
+  const startOfMonth = new Date(now);
+  startOfMonth.setDate(now.getDate() - 30);
+  startOfMonth.setHours(0, 0, 0, 0);
+  
+  return getExtendedStats(startOfMonth, now);
+}
 
-    const text = `📊 <b>Статистика пополнений</b>
+/**
+ * Сформировать красивый текст статистики
+ */
+async function generateStatsMessage() {
+  const todayStats = await getTodayStats();
+  const weekStats = await getWeekStats();
+  const monthStats = await getMonthStats();
+  const userStats = await getUserStats();
+
+  const text = `📊 <b>Статистика MaxGroot VPN</b>
+
+━━━━━━━━━━━━━━━━━━━━
+
+💰 <b>ПОПОЛНЕНИЯ</b>
 
 📅 <b>Сегодня:</b>
-• Транзакций: ${todayStats.count}
-• Сумма: ${ruMoney(todayStats.totalAmount)}
+├ 💵 Сумма: <b>${ruMoney(todayStats.totalAmount)}</b>
+├ 📝 Транзакций: ${todayStats.count}
+├ 👥 Уникальных: ${todayStats.uniqueUsers}
+└ 📈 Средний чек: ${ruMoney(todayStats.avgAmount)}
 
 📆 <b>За 7 дней:</b>
-• Транзакций: ${weekStats.count}
-• Сумма: ${ruMoney(weekStats.totalAmount)}
+├ 💵 Сумма: <b>${ruMoney(weekStats.totalAmount)}</b>
+├ 📝 Транзакций: ${weekStats.count}
+├ 👥 Уникальных: ${weekStats.uniqueUsers}
+├ 📈 Средний чек: ${ruMoney(weekStats.avgAmount)}
+└ 🏆 Макс. пополнение: ${ruMoney(weekStats.maxTopup)}
 
-⏰ ${formatDate(new Date())}`;
+📅 <b>За 30 дней:</b>
+├ 💵 Сумма: <b>${ruMoney(monthStats.totalAmount)}</b>
+├ 📝 Транзакций: ${monthStats.count}
+├ 👥 Уникальных: ${monthStats.uniqueUsers}
+└ 📈 Средний чек: ${ruMoney(monthStats.avgAmount)}
 
-    await sendToAdminGroup(text);
-    console.log("[ADMIN] Daily stats sent");
+━━━━━━━━━━━━━━━━━━━━
+
+👥 <b>ПОЛЬЗОВАТЕЛИ</b>
+
+├ 👤 Всего: <b>${userStats.totalUsers}</b>
+├ 🆕 Новых сегодня: ${userStats.newUsersToday}
+├ 📆 Новых за неделю: ${userStats.newUsersWeek}
+├ 💳 С балансом: ${userStats.usersWithBalance}
+├ 💰 Общий баланс: ${ruMoney(userStats.totalBalance)}
+└ ✅ Активных подписок: ${userStats.activeSubscriptions}
+
+━━━━━━━━━━━━━━━━━━━━
+
+📊 <b>Распределение (7 дней):</b>
+├ 🟢 до 200₽: ${weekStats.distribution.small}
+├ 🟡 200-500₽: ${weekStats.distribution.medium}
+└ 🔴 более 500₽: ${weekStats.distribution.large}
+
+⏰ <i>${formatDate(new Date())}</i>`;
+
+  return text;
+}
+
+/**
+ * Отправить статистику (по команде или по расписанию)
+ */
+async function sendStats(chatId = null) {
+  try {
+    const text = await generateStatsMessage();
+    
+    if (chatId) {
+      // Отправляем в конкретный чат (по команде)
+      await botInstance.telegram.sendMessage(chatId, text, { parse_mode: "HTML" });
+    } else {
+      // Отправляем в админ-группу (по расписанию)
+      await sendToAdminGroup(text);
+    }
+    
+    console.log("[ADMIN] Stats sent");
   } catch (err) {
     console.error("[ADMIN] Ошибка отправки статистики:", err.message);
   }
@@ -109,6 +243,19 @@ async function sendDailyStats() {
  */
 function initAdminNotifier(bot) {
   botInstance = bot;
+
+  // Команда /stat в админ-группе
+  bot.command("stat", async (ctx) => {
+    const chatId = String(ctx.chat.id);
+    
+    // Проверяем, что команда из админ-группы
+    if (chatId !== ADMIN_GROUP_ID) {
+      return; // Игнорируем команду из других чатов
+    }
+    
+    await ctx.reply("⏳ Собираю статистику...");
+    await sendStats(chatId);
+  });
 
   // Уведомление о успешном пополнении
   bus.on("topup.success", async ({ topupId }) => {
@@ -138,9 +285,10 @@ function initAdminNotifier(bot) {
   });
 
   // Запуск ежедневной статистики в 20:00
-  scheduleDaily(20, 0, sendDailyStats);
+  scheduleDaily(20, 0, () => sendStats());
 
   console.log("📢 Admin notifier initialized (group: " + ADMIN_GROUP_ID + ")");
+  console.log("📊 Command /stat available in admin group");
 }
 
 /**
@@ -168,8 +316,11 @@ function scheduleDaily(hour, minute, callback) {
 
 module.exports = {
   initAdminNotifier,
-  sendDailyStats,
+  sendStats,
   getTodayStats,
   getWeekStats,
+  getMonthStats,
+  getUserStats,
   sendToAdminGroup,
+  ADMIN_GROUP_ID,
 };
