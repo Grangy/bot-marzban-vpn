@@ -6,6 +6,7 @@ const { initNotifier } = require("./notifier");
 const { startTopupCleaner } = require("./topupCleaner");
 const { startSubExpiryNotifier } = require("./subExpiryNotifier");
 const { startBackupScheduler } = require("./backup");
+const { initAdminNotifier } = require("./admin-notifier");
 
 
 const PORT = process.env.PAYMENT_PORT || 4000;
@@ -26,6 +27,9 @@ const PORT = process.env.PAYMENT_PORT || 4000;
 
     // Подключаем нотификатор к событиям оплаты
     initNotifier(bot);
+    
+    // Подключаем админ-нотификатор (уведомления в группу)
+    initAdminNotifier(bot);
 
     // Бот — асинхронно с таймаутом
     console.log("🤖 Launching Telegram bot...");
