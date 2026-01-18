@@ -6,8 +6,8 @@ const FormData = require('form-data');
 const path = require('path');
 
 // Яндекс.Диск настройки (из .env)
-const CLIENT_ID = process.env.YANDEX_CLIENT_ID || 'YANDEX_CLIENT_ID_REMOVED';
-const CLIENT_SECRET = process.env.YANDEX_CLIENT_SECRET || 'YANDEX_CLIENT_SECRET_REMOVED';
+const CLIENT_ID = process.env.YANDEX_CLIENT_ID;
+const CLIENT_SECRET = process.env.YANDEX_CLIENT_SECRET;
 const REDIRECT_URI = 'https://oauth.yandex.ru/verification_code';
 const TOKEN_FILE = path.join(__dirname, 'token.json');
 
