@@ -88,10 +88,14 @@ function getText(fileName) {
 
 // Функция для получения текста инструкции (без ссылок подписки) - эталон из этапа покупки
 function getInstructionTextForDevice(deviceType) {
+  // Специальная инструкция для Android TV
+  if (deviceType === 'android_tv') {
+    return getAndroidTVInstructionText();
+  }
+  
   const deviceNames = {
     ios: { name: "iPhone", title: "Пошаговая настройка для iPhone:" },
     android: { name: "вашем устройстве", title: "Пошаговая настройка для Android:" },
-    android_tv: { name: "вашем Android TV", title: "Пошаговая настройка для Android TV:" },
     windows: { name: "вашем компьютере", title: "Пошаговая настройка для Windows:" },
     macos: { name: "вашем Mac", title: "Пошаговая настройка для macOS:" }
   };
@@ -113,23 +117,62 @@ function getInstructionTextForDevice(deviceType) {
   return text;
 }
 
+// Специальная инструкция для Android TV
+function getAndroidTVInstructionText() {
+  let text = `📺 Пошаговая настройка для Android TV:\n\n`;
+  text += `Приложение Happ на Android TV не отличается от мобильного приложения и устанавливается с помощью APK или через Google Play.\n\n`;
+  text += `📱 Способ 1: Через QR-код (рекомендуется)\n`;
+  text += `При первом запуске приложение предложит добавить подписку по локальной сети через QR-код. Просто отсканируйте QR-код в мобильном приложении Happ для iOS или Android, после чего телефон попытается передать выбранные серверы или подписку на телевизор.\n\n`;
+  text += `🌐 Способ 2: Через сайт tv.happ.su\n`;
+  text += `На телевизоре выберите пункт «Web Import» и введите отображённый код либо отсканируйте QR-код и откройте ссылку в браузере телефона.\n\n`;
+  text += `💡 Если у вас оператор «Миранда», используйте вторую ссылку из раздела «Мои подписки»\n\n`;
+  text += `✅ Готово! Ваш интернет работает через VPN.`;
+  
+  return text;
+}
+
 // Функция для получения видео файла по устройству
 function getVideoFileForDevice(deviceType) {
   // Android и Android TV используют IMG_1021.mp4
   if (deviceType === 'android' || deviceType === 'android_tv') {
     return 'IMG_1021.mp4';
   }
-  // iOS, macOS, Windows используют IMG_1019.mp4
+  // iOS использует IMG_1020.mp4
+  if (deviceType === 'ios') {
+    return 'IMG_1020.mp4';
+  }
+  // macOS, Windows используют IMG_1019.mp4
   return 'IMG_1019.mp4';
 }
 
-// Функция для создания меню внутри инструкции устройства
+// Ссылки для скачивания приложений
+const APP_DOWNLOAD_LINKS = {
+  ios: "https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973",
+  android: "https://play.google.com/store/apps/details?id=com.happproxy",
+  android_tv_play: "https://play.google.com/store/apps/details?id=com.happproxy",
+  android_tv_apk: "https://github.com/Happ-proxy/happ-android/releases/latest/download/Happ.apk",
+  windows: "https://github.com/Happ-proxy/happ-desktop/releases/latest/download/setup-Happ.x64.exe",
+  macos: "https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973"
+};
+
+// Функция для создания меню внутри инструкции устройства (с ссылками на приложения)
 function deviceInstructionMenu(deviceType) {
-  return Markup.inlineKeyboard([
-    [Markup.button.callback("📹 Видео-инструкция", `guide_video_${deviceType}`)],
-    [Markup.button.callback("⬅️ Назад к выбору устройства", "instructions")],
-    [Markup.button.callback("⬅️ В меню", "back")],
-  ]);
+  const buttons = [];
+  
+  // Ссылка на скачивание приложения
+  if (deviceType === 'android_tv') {
+    // Для Android TV две ссылки
+    buttons.push([Markup.button.url("📥 Скачать Happ (Google Play)", APP_DOWNLOAD_LINKS.android_tv_play)]);
+    buttons.push([Markup.button.url("📥 Скачать Happ (APK)", APP_DOWNLOAD_LINKS.android_tv_apk)]);
+  } else {
+    buttons.push([Markup.button.url("📥 Скачать Happ", APP_DOWNLOAD_LINKS[deviceType])]);
+  }
+  
+  buttons.push([Markup.button.callback("📹 Видео-инструкция", `guide_video_${deviceType}`)]);
+  buttons.push([Markup.button.callback("⬅️ Назад к выбору устройства", "instructions")]);
+  buttons.push([Markup.button.callback("⬅️ В меню", "back")]);
+  
+  return Markup.inlineKeyboard(buttons);
 }
 
 // iOS / macOS
@@ -146,11 +189,24 @@ bot.action("guide_android", async (ctx) => {
   await editOrAnswer(ctx, text, deviceInstructionMenu("android"));
 });
 
-// Android TV
+// Android TV (с картинками)
 bot.action("guide_android_tv", async (ctx) => {
   await ctx.answerCbQuery();
   const text = getInstructionTextForDevice("android_tv");
-  await editOrAnswer(ctx, text, deviceInstructionMenu("android_tv"));
+  
+  // Отправляем картинки с инструкцией
+  try {
+    // Отправляем медиагруппу с двумя картинками
+    await ctx.sendMediaGroup([
+      { type: 'photo', media: { source: 'image2.png' }, caption: '📱 QR-код для сканирования через Happ' },
+      { type: 'photo', media: { source: 'image.png' }, caption: '🌐 Web Import через tv.happ.su' }
+    ]);
+  } catch (e) {
+    console.error("Error sending Android TV images:", e);
+  }
+  
+  // Отправляем текст инструкции с кнопками
+  await ctx.reply(text, deviceInstructionMenu("android_tv"));
 });
 
 // Windows
@@ -716,15 +772,6 @@ return tx.subscription.update({
       return ctx.reply("Подписка не найдена.");
     }
 
-    // Ссылки для скачивания
-    const downloadLinks = {
-      ios: "https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973",
-      android: "https://play.google.com/store/apps/details?id=com.happproxy",
-      android_tv: "https://play.google.com/store/apps/details?id=com.happproxy",
-      windows: "https://github.com/Happ-proxy/happ-desktop/releases/latest/download/setup-Happ.x64.exe",
-      macos: "https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973"
-    };
-
     const deviceNames = {
       ios: "iPhone (iOS)",
       android: "Android",
@@ -740,11 +787,21 @@ return tx.subscription.update({
 
 Нажмите кнопку ниже, чтобы перейти в магазин приложений.`;
 
-    const keyboard = Markup.inlineKeyboard([
-      [Markup.button.url("📥 Скачать Happ", downloadLinks[device])],
-      [Markup.button.callback("✅ Я скачал приложение", `setup_downloaded_${device}_${subscriptionId}`)],
-      [Markup.button.callback("⬅️ Назад", `setup_device_${subscriptionId}`)]
-    ]);
+    // Формируем кнопки в зависимости от устройства
+    const buttons = [];
+    
+    if (device === 'android_tv') {
+      // Для Android TV две ссылки
+      buttons.push([Markup.button.url("📥 Скачать Happ (Google Play)", APP_DOWNLOAD_LINKS.android_tv_play)]);
+      buttons.push([Markup.button.url("📥 Скачать Happ (APK)", APP_DOWNLOAD_LINKS.android_tv_apk)]);
+    } else {
+      buttons.push([Markup.button.url("📥 Скачать Happ", APP_DOWNLOAD_LINKS[device])]);
+    }
+    
+    buttons.push([Markup.button.callback("✅ Я скачал приложение", `setup_downloaded_${device}_${subscriptionId}`)]);
+    buttons.push([Markup.button.callback("⬅️ Назад", `setup_device_${subscriptionId}`)]);
+
+    const keyboard = Markup.inlineKeyboard(buttons);
 
     await editOrAnswer(ctx, text, keyboard);
   });
@@ -771,10 +828,14 @@ return tx.subscription.update({
     
     // Формируем текст инструкции со ссылками для каждого устройства
     const getInstructionText = (deviceType, url1, url2) => {
+      // Специальная инструкция для Android TV
+      if (deviceType === 'android_tv') {
+        return getAndroidTVInstructionTextWithLinks(url1, url2);
+      }
+      
       const deviceNames = {
         ios: { name: "iPhone", title: "Пошаговая настройка для iPhone:" },
         android: { name: "вашем устройстве", title: "Пошаговая настройка для Android:" },
-        android_tv: { name: "вашем Android TV", title: "Пошаговая настройка для Android TV:" },
         windows: { name: "вашем компьютере", title: "Пошаговая настройка для Windows:" },
         macos: { name: "вашем Mac", title: "Пошаговая настройка для macOS:" }
       };
@@ -804,6 +865,29 @@ return tx.subscription.update({
       
       return text;
     };
+    
+    // Специальная инструкция для Android TV с ссылками
+    const getAndroidTVInstructionTextWithLinks = (url1, url2) => {
+      let text = `📺 Пошаговая настройка для Android TV:\n\n`;
+      text += `Приложение Happ на Android TV не отличается от мобильного приложения и устанавливается с помощью APK или через Google Play.\n\n`;
+      text += `📱 Способ 1: Через QR-код (рекомендуется)\n`;
+      text += `При первом запуске приложение предложит добавить подписку по локальной сети через QR-код. Просто отсканируйте QR-код в мобильном приложении Happ для iOS или Android, после чего телефон попытается передать выбранные серверы или подписку на телевизор.\n\n`;
+      text += `🌐 Способ 2: Через сайт tv.happ.su\n`;
+      text += `На телевизоре выберите пункт «Web Import» и введите отображённый код либо отсканируйте QR-код и откройте ссылку в браузере телефона.\n\n`;
+      
+      text += `🔗 Ваши ссылки подписки:\n`;
+      if (url1) {
+        text += `${url1}\n\n`;
+      }
+      if (url2) {
+        text += `💡Если у вас оператор «Миранда»:\n`;
+        text += `${url2}\n\n`;
+      }
+      
+      text += `✅ Готово! Ваш интернет работает через VPN.`;
+      
+      return text;
+    };
 
     // Формируем полное сообщение с инструкцией
     const fullMessage = getInstructionText(device, subscriptionUrl, subscriptionUrl2);
@@ -814,6 +898,18 @@ return tx.subscription.update({
       [Markup.button.callback("📹 Видео-инструкция", `setup_video_${device}_${subscriptionId}`)],
       [Markup.button.callback("⬅️ В меню", "back")]
     ];
+
+    // Для Android TV отправляем картинки
+    if (device === 'android_tv') {
+      try {
+        await ctx.sendMediaGroup([
+          { type: 'photo', media: { source: 'image2.png' }, caption: '📱 QR-код для сканирования через Happ' },
+          { type: 'photo', media: { source: 'image.png' }, caption: '🌐 Web Import через tv.happ.su' }
+        ]);
+      } catch (e) {
+        console.error("Error sending Android TV images:", e);
+      }
+    }
 
     await editOrAnswer(ctx, fullMessage, Markup.inlineKeyboard(buttons));
 
@@ -834,7 +930,14 @@ return tx.subscription.update({
     }
 
     // Выбираем видео файл в зависимости от устройства
-    const videoFile = (deviceType === 'android' || deviceType === 'android_tv') ? 'IMG_1021.mp4' : 'IMG_1019.mp4';
+    let videoFile;
+    if (deviceType === 'android' || deviceType === 'android_tv') {
+      videoFile = 'IMG_1021.mp4';
+    } else if (deviceType === 'ios') {
+      videoFile = 'IMG_1020.mp4';
+    } else {
+      videoFile = 'IMG_1019.mp4';
+    }
     
     const deviceNames = {
       ios: "iPhone",
