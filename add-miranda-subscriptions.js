@@ -109,18 +109,11 @@ async function createUserOnRus2(userData) {
 }
 
 /**
- * Извлекает username из subscriptionUrl
- * Формат: https://vpn.grangy.ru/sub/TOKEN -> TOKEN содержит username
+ * Формирует username для Marzban
+ * Формат: {telegramId}_{type}_{subscriptionId}
  */
-function extractUsernameFromUrl(subscriptionUrl) {
-  if (!subscriptionUrl) return null;
-  
-  // Пробуем извлечь токен из URL
-  const match = subscriptionUrl.match(/\/sub\/([^\/\?]+)/);
-  if (match) {
-    return match[1];
-  }
-  return null;
+function buildMarzbanUsername(telegramId, type, subscriptionId) {
+  return `${telegramId}_${type}_${subscriptionId}`;
 }
 
 async function main() {
@@ -166,24 +159,63 @@ async function main() {
     console.log(`  Истекает: ${sub.endDate?.toISOString()}`);
     console.log(`  URL1: ${sub.subscriptionUrl}`);
 
-    // Извлекаем username из основной подписки
-    const token = extractUsernameFromUrl(sub.subscriptionUrl);
-    if (!token) {
-      console.log(`  ⚠️ Не удалось извлечь токен из URL`);
-      skippedCount++;
-      continue;
-    }
+    // Формируем username для Marzban
+    const marzbanUsername = buildMarzbanUsername(sub.user.telegramId, sub.type, sub.id);
+    console.log(`  Marzban username: ${marzbanUsername}`);
 
     // Получаем данные пользователя с основного сервера
-    const marzbanUser = await getMarzbanUser(token);
+    const marzbanUser = await getMarzbanUser(marzbanUsername);
     
     if (!marzbanUser) {
-      console.log(`  ⚠️ Пользователь не найден на основном сервере`);
-      skippedCount++;
+      console.log(`  ⚠️ Пользователь не найден на основном сервере, создаём напрямую...`);
+      
+      // Если пользователь не найден на основном сервере, создаём на rus2 напрямую
+      // используя данные из БД
+      const expireTimestamp = Math.floor(sub.endDate.getTime() / 1000);
+      
+      const userData = {
+        username: marzbanUsername,
+        status: "active",
+        expire: expireTimestamp,
+        proxies: {
+          vless: {
+            id: require("crypto").randomUUID(),
+            flow: "xtls-rprx-vision"
+          }
+        },
+        note: `Telegram user ${sub.user.accountName || sub.user.telegramId}`,
+        data_limit: 0,
+        data_limit_reset_strategy: "no_reset"
+      };
+
+      if (isDryRun) {
+        console.log(`  ✅ [DRY-RUN] Будет создан на rus2 (expire: ${sub.endDate.toISOString()})`);
+        successCount++;
+        continue;
+      }
+
+      const rus2UrlRaw = await createUserOnRus2(userData);
+      
+      if (!rus2UrlRaw) {
+        console.log(`  ❌ Не удалось создать на rus2`);
+        errorCount++;
+        continue;
+      }
+
+      const rus2Url = convertToRus2Url(rus2UrlRaw) || rus2UrlRaw;
+      console.log(`  URL2: ${rus2Url}`);
+
+      // Обновляем подписку в БД
+      await prisma.subscription.update({
+        where: { id: sub.id },
+        data: { subscriptionUrl2: rus2Url }
+      });
+
+      console.log(`  ✅ Успешно добавлена Miranda подписка`);
+      successCount++;
       continue;
     }
 
-    console.log(`  Marzban username: ${marzbanUser.username}`);
     console.log(`  Expire: ${new Date(marzbanUser.expire * 1000).toISOString()}`);
 
     if (isDryRun) {
