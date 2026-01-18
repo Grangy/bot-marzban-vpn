@@ -2,7 +2,7 @@
 const path = require("path");
 const { google } = require("googleapis");
 
-const SPREADSHEET_ID = "1ysYdpyercsaJ2OgtEYiFskU7caGSQ93jJSTfXzUiJ38";
+const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID || "1ysYdpyercsaJ2OgtEYiFskU7caGSQ93jJSTfXzUiJ38";
 const SHEET_NAME = "Лист1";
 const KEYFILE_PATH = path.resolve(__dirname, "table-484713-7d2b62fb7e2e.json");
 

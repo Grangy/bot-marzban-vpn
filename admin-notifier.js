@@ -4,7 +4,7 @@ const { prisma } = require("./db");
 const { ruMoney } = require("./menus");
 
 // ID группы для уведомлений
-const ADMIN_GROUP_ID = "-5184781938";
+const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID || "-5184781938";
 
 let botInstance = null;
 
