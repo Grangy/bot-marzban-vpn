@@ -146,12 +146,12 @@ async function ensureFolder(token, folderPath) {
 // 4️⃣ Загрузить файл на Яндекс.Диск
 async function uploadFile(token) {
     try {
-        // Сначала убеждаемся, что папка backup существует
-        await ensureFolder(token, 'backup');
+        // Сначала убеждаемся, что папка backup_bot_tg существует
+        await ensureFolder(token, 'backup_bot_tg');
 
         // Получаем ссылку для загрузки
         const uploadUrlResp = await axios.get('https://cloud-api.yandex.net/v1/disk/resources/upload', {
-            params: { path: 'backup/test.txt', overwrite: true },
+            params: { path: 'backup_bot_tg/test.txt', overwrite: true },
             headers: { Authorization: `OAuth ${token}` }
         });
         const uploadUrl = uploadUrlResp.data.href;

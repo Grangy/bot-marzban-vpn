@@ -13,7 +13,7 @@ const LAST_BACKUP_FILE = path.join(BACKUP_DIR, '.last_backup');
 const CLIENT_ID = process.env.YANDEX_CLIENT_ID;
 const CLIENT_SECRET = process.env.YANDEX_CLIENT_SECRET;
 const TOKEN_FILE = path.join(__dirname, 'token.json');
-const YANDEX_BACKUP_FOLDER = 'vpn-bot-backups';
+const YANDEX_BACKUP_FOLDER = 'backup_bot_tg';
 
 /**
  * Загрузка токенов Яндекс.Диска
