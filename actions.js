@@ -91,14 +91,14 @@ bot.action("guide_video", async (ctx) => {
   await ctx.answerCbQuery();
   
   // Проверяем существование файла
-  if (!fs.existsSync('video.mp4')) {
-    console.warn("Video file video.mp4 not found");
+  if (!fs.existsSync('IMG_1019.mp4')) {
+    console.warn("Video file IMG_1019.mp4 not found");
     await editOrAnswer(ctx, "❌ Видео-файл не найден на сервере. Используйте текстовые инструкции.", instructionsMenu());
     return;
   }
   
   try {
-    await ctx.sendVideo({ source: 'video.mp4' }, { 
+    await ctx.sendVideo({ source: 'IMG_1019.mp4' }, { 
       caption: "📹 Видео-инструкция по настройке VPN\n\nСмотрите подробное видео по подключению к VPN сервису.",
       reply_markup: instructionsMenu().reply_markup
     });
@@ -113,14 +113,14 @@ bot.action("guide_ios", async (ctx) => {
   await ctx.answerCbQuery();
   const text = getText("ios-macos.txt");
   
-  if (!fs.existsSync('video.mp4')) {
-    console.warn("Video file video.mp4 not found");
+  if (!fs.existsSync('IMG_1019.mp4')) {
+    console.warn("Video file IMG_1019.mp4 not found");
     await editOrAnswer(ctx, text, instructionsMenu());
     return;
   }
   
   try {
-    await ctx.sendVideo({ source: 'video.mp4' }, { 
+    await ctx.sendVideo({ source: 'IMG_1019.mp4' }, { 
       caption: text,
       reply_markup: instructionsMenu().reply_markup
     });
@@ -135,14 +135,14 @@ bot.action("guide_android", async (ctx) => {
   await ctx.answerCbQuery();
   const text = getText("android.txt");
   
-  if (!fs.existsSync('video.mp4')) {
-    console.warn("Video file video.mp4 not found");
+  if (!fs.existsSync('IMG_1019.mp4')) {
+    console.warn("Video file IMG_1019.mp4 not found");
     await editOrAnswer(ctx, text, instructionsMenu());
     return;
   }
   
   try {
-    await ctx.sendVideo({ source: 'video.mp4' }, { 
+    await ctx.sendVideo({ source: 'IMG_1019.mp4' }, { 
       caption: text,
       reply_markup: instructionsMenu().reply_markup
     });
@@ -157,14 +157,14 @@ bot.action("guide_windows", async (ctx) => {
   await ctx.answerCbQuery();
   const text = getText("windows.txt");
   
-  if (!fs.existsSync('video.mp4')) {
-    console.warn("Video file video.mp4 not found");
+  if (!fs.existsSync('IMG_1019.mp4')) {
+    console.warn("Video file IMG_1019.mp4 not found");
     await editOrAnswer(ctx, text, instructionsMenu());
     return;
   }
   
   try {
-    await ctx.sendVideo({ source: 'video.mp4' }, { 
+    await ctx.sendVideo({ source: 'IMG_1019.mp4' }, { 
       caption: text,
       reply_markup: instructionsMenu().reply_markup
     });
@@ -799,8 +799,8 @@ return tx.subscription.update({
     }
 
     // Проверяем существование файла видео
-    if (!fs.existsSync('video.mp4')) {
-      console.warn("Video file video.mp4 not found");
+    if (!fs.existsSync('IMG_1019.mp4')) {
+      console.warn("Video file IMG_1019.mp4 not found");
       await ctx.reply("❌ Видео-файл не найден на сервере. Используйте текстовые инструкции.");
       return;
     }
@@ -808,7 +808,7 @@ return tx.subscription.update({
     try {
       // Отправляем видео с инструкцией
       await ctx.sendVideo(
-        { source: 'video.mp4' },
+        { source: 'IMG_1019.mp4' },
         {
           caption: "📹 Видео-инструкция по настройке VPN\n\nСмотрите подробное видео по подключению к VPN сервису.",
           reply_markup: Markup.inlineKeyboard([
