@@ -97,6 +97,53 @@ function registerWebAppAPI(app) {
   // ==========================================
 
   /**
+   * Вспомогательная функция для получения правильного пользователя
+   * Если есть дубликаты - выбирает того, у кого больше активности
+   */
+  async function getMainUser(telegramId) {
+    const users = await prisma.user.findMany({
+      where: { telegramId: String(telegramId) },
+      include: {
+        subscriptions: { select: { id: true } },
+        topUps: { select: { id: true } }
+      },
+      orderBy: { id: "asc" } // Самый старый - основной
+    });
+
+    if (users.length === 0) {
+      return null;
+    }
+
+    if (users.length === 1) {
+      return users[0];
+    }
+
+    // Если есть дубликаты - выбираем того, у кого больше активности
+    // Подсчитываем активность: баланс + количество подписок + количество пополнений
+    const usersWithActivity = users.map(user => ({
+      user,
+      activity: user.balance + (user.subscriptions.length * 10) + user.topUps.length
+    }));
+
+    // Сортируем по активности (по убыванию), затем по ID (по возрастанию - самый старый)
+    usersWithActivity.sort((a, b) => {
+      if (b.activity !== a.activity) {
+        return b.activity - a.activity;
+      }
+      return a.user.id - b.user.id;
+    });
+
+    const mainUser = usersWithActivity[0].user;
+
+    // Логируем предупреждение если есть дубликаты
+    if (users.length > 1) {
+      console.warn(`[WEBAPP] Найдено ${users.length} пользователей с telegramId ${telegramId}, используется ID ${mainUser.id}`);
+    }
+
+    return mainUser;
+  }
+
+  /**
    * GET /api/user/:telegramId
    * Получить ВСЕ данные пользователя из БД (полный личный кабинет)
    */
@@ -104,9 +151,19 @@ function registerWebAppAPI(app) {
     try {
       const { telegramId } = req.params;
       
+      // Получаем правильного пользователя (с учетом дубликатов)
+      const mainUser = await getMainUser(telegramId);
+      if (!mainUser) {
+        return res.status(404).json({ 
+          ok: false, 
+          error: "USER_NOT_FOUND",
+          message: "Пользователь не найден" 
+        });
+      }
+
       // Получаем пользователя со ВСЕМИ связанными данными
-      const user = await prisma.user.findFirst({
-        where: { telegramId: String(telegramId) },
+      const user = await prisma.user.findUnique({
+        where: { id: mainUser.id },
         include: {
           // ВСЕ подписки (включая истекшие и FREE)
           subscriptions: {
@@ -297,9 +354,17 @@ function registerWebAppAPI(app) {
     try {
       const { telegramId } = req.params;
       
-      // Получаем пользователя через Prisma
-      const user = await prisma.user.findFirst({
-        where: { telegramId: String(telegramId) },
+      // Получаем правильного пользователя (с учетом дубликатов)
+      const mainUser = await getMainUser(telegramId);
+      if (!mainUser) {
+        return res.status(404).json({ 
+          ok: false, 
+          error: "USER_NOT_FOUND" 
+        });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: mainUser.id },
         select: { id: true, balance: true, telegramId: true }
       });
 
@@ -393,8 +458,16 @@ function registerWebAppAPI(app) {
       const { telegramId } = req.params;
       const { active, expired, type } = req.query; // ?active=true - только активные, ?expired=true - только истекшие, ?type=M1 - по типу
       
-      const user = await prisma.user.findFirst({
-        where: { telegramId: String(telegramId) }
+      const mainUser = await getMainUser(telegramId);
+      if (!mainUser) {
+        return res.status(404).json({ 
+          ok: false, 
+          error: "USER_NOT_FOUND" 
+        });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: mainUser.id }
       });
 
       if (!user) {
@@ -455,8 +528,16 @@ function registerWebAppAPI(app) {
     try {
       const { telegramId } = req.params;
       
-      const user = await prisma.user.findFirst({
-        where: { telegramId: String(telegramId) },
+      const mainUser = await getMainUser(telegramId);
+      if (!mainUser) {
+        return res.status(404).json({ 
+          ok: false, 
+          error: "USER_NOT_FOUND" 
+        });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: mainUser.id },
         include: {
           subscriptions: true,
           topUps: true,
@@ -539,8 +620,16 @@ function registerWebAppAPI(app) {
     try {
       const { telegramId } = req.params;
       
-      const user = await prisma.user.findFirst({
-        where: { telegramId: String(telegramId) },
+      const mainUser = await getMainUser(telegramId);
+      if (!mainUser) {
+        return res.status(404).json({ 
+          ok: false, 
+          error: "USER_NOT_FOUND" 
+        });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: mainUser.id },
         include: {
           promoActivationsAsOwner: {
             include: {
@@ -663,8 +752,16 @@ function registerWebAppAPI(app) {
         });
       }
 
-      const user = await prisma.user.findFirst({
-        where: { telegramId: String(telegramId) }
+      const mainUser = await getMainUser(telegramId);
+      if (!mainUser) {
+        return res.status(404).json({ 
+          ok: false, 
+          error: "USER_NOT_FOUND" 
+        });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: mainUser.id }
       });
 
       if (!user) {
@@ -743,8 +840,16 @@ function registerWebAppAPI(app) {
       const { telegramId } = req.params;
       const { limit, status, credited } = req.query; // ?status=SUCCESS, ?credited=true
 
-      const user = await prisma.user.findFirst({
-        where: { telegramId: String(telegramId) }
+      const mainUser = await getMainUser(telegramId);
+      if (!mainUser) {
+        return res.status(404).json({ 
+          ok: false, 
+          error: "USER_NOT_FOUND" 
+        });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: mainUser.id }
       });
 
       if (!user) {
@@ -830,8 +935,16 @@ function registerWebAppAPI(app) {
         });
       }
 
-      const user = await prisma.user.findFirst({
-        where: { telegramId: String(telegramId) }
+      const mainUser = await getMainUser(telegramId);
+      if (!mainUser) {
+        return res.status(404).json({ 
+          ok: false, 
+          error: "USER_NOT_FOUND" 
+        });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: mainUser.id }
       });
 
       if (!user) {
@@ -987,6 +1100,66 @@ function registerWebAppAPI(app) {
   });
 
   /**
+   * GET /api/user/:telegramId/duplicates
+   * Проверка дубликатов пользователя
+   */
+  app.get("/api/user/:telegramId/duplicates", async (req, res) => {
+    try {
+      const { telegramId } = req.params;
+      
+      const users = await prisma.user.findMany({
+        where: { telegramId: String(telegramId) },
+        include: {
+          subscriptions: { select: { id: true } },
+          topUps: { select: { id: true } }
+        },
+        orderBy: { id: "asc" }
+      });
+
+      if (users.length === 0) {
+        return res.status(404).json({ 
+          ok: false, 
+          error: "USER_NOT_FOUND" 
+        });
+      }
+
+      const usersData = users.map(user => ({
+        id: user.id,
+        chatId: user.chatId,
+        username: user.accountName,
+        balance: user.balance,
+        promoCode: user.promoCode,
+        subscriptionsCount: user.subscriptions.length,
+        topupsCount: user.topUps.length,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        activity: user.balance + (user.subscriptions.length * 10) + user.topUps.length
+      }));
+
+      // Определяем основного пользователя
+      const mainUser = usersData.reduce((prev, curr) => 
+        curr.activity > prev.activity ? curr : prev
+      );
+
+      res.json({
+        ok: true,
+        data: {
+          totalUsers: users.length,
+          hasDuplicates: users.length > 1,
+          mainUser: mainUser,
+          allUsers: usersData,
+          recommendation: users.length > 1 
+            ? "Обнаружены дубликаты пользователя. Рекомендуется объединить данные."
+            : "Дубликатов не найдено."
+        }
+      });
+    } catch (error) {
+      console.error("[WEBAPP] Check duplicates error:", error);
+      res.status(500).json({ ok: false, error: "SERVER_ERROR", message: error.message });
+    }
+  });
+
+  /**
    * GET /api/user/:telegramId/balance/debug
    * Диагностика баланса (детальная информация)
    */
@@ -994,8 +1167,16 @@ function registerWebAppAPI(app) {
     try {
       const { telegramId } = req.params;
       
-      const user = await prisma.user.findFirst({
-        where: { telegramId: String(telegramId) },
+      const mainUser = await getMainUser(telegramId);
+      if (!mainUser) {
+        return res.status(404).json({ 
+          ok: false, 
+          error: "USER_NOT_FOUND" 
+        });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: mainUser.id },
         select: { 
           id: true, 
           balance: true, 
