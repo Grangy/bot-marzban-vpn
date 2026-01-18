@@ -173,10 +173,28 @@ bot.action("guide_windows", async (ctx) => {
     await editOrAnswer(ctx, text, instructionsMenu());
   }
 });
-    // Купить подписку — вывод планов
+    // Купить подписку — если нет средств, сразу ведём в пополнение
     bot.action("buy", async (ctx) => {
       await ctx.answerCbQuery();
-      await editOrAnswer(ctx, "Выберите подписку:", buyMenu());
+
+      const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+
+      // Минимальная стоимость платного тарифа (M1/M3/M6/M12)
+      const paidPrices = Object.values(PLANS)
+        .map((p) => p?.price)
+        .filter((p) => typeof p === "number" && p > 0);
+      const minPaidPrice = paidPrices.length ? Math.min(...paidPrices) : 0;
+
+      // Если баланс меньше минимального тарифа — сразу предлагаем пополнение
+      if ((user?.balance || 0) < minPaidPrice) {
+        return editOrAnswer(
+          ctx,
+          `💳 Для покупки подписки нужно пополнить баланс.\n\nТекущий баланс: ${ruMoney(user?.balance || 0)}\nМинимальная подписка: ${ruMoney(minPaidPrice)}\n\nВыберите сумму пополнения:`,
+          topupMenu()
+        );
+      }
+
+      return editOrAnswer(ctx, "Выберите подписку:", buyMenu());
     });
 
     // Покупка конкретного плана
