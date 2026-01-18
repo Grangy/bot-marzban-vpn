@@ -86,91 +86,121 @@ function getText(fileName) {
   return fs.readFileSync(filePath, "utf-8");
 }
 
-// Видео-инструкция
-bot.action("guide_video", async (ctx) => {
-  await ctx.answerCbQuery();
+// Функция для получения текста инструкции (без ссылок подписки) - эталон из этапа покупки
+function getInstructionTextForDevice(deviceType) {
+  const deviceNames = {
+    ios: { name: "iPhone", title: "Пошаговая настройка для iPhone:" },
+    android: { name: "вашем устройстве", title: "Пошаговая настройка для Android:" },
+    android_tv: { name: "вашем Android TV", title: "Пошаговая настройка для Android TV:" },
+    windows: { name: "вашем компьютере", title: "Пошаговая настройка для Windows:" },
+    macos: { name: "вашем Mac", title: "Пошаговая настройка для macOS:" }
+  };
   
-  // Проверяем существование файла
-  if (!fs.existsSync('IMG_1019.mp4')) {
-    console.warn("Video file IMG_1019.mp4 not found");
-    await editOrAnswer(ctx, "❌ Видео-файл не найден на сервере. Используйте текстовые инструкции.", instructionsMenu());
-    return;
-  }
+  const device = deviceNames[deviceType];
   
-  try {
-    await ctx.sendVideo({ source: 'IMG_1019.mp4' }, { 
-      caption: "📹 Видео-инструкция по настройке VPN\n\nСмотрите подробное видео по подключению к VPN сервису.",
-      reply_markup: instructionsMenu().reply_markup
-    });
-  } catch (e) {
-    console.error("Error sending video:", e);
-    await editOrAnswer(ctx, "❌ Ошибка отправки видео. Используйте текстовые инструкции.", instructionsMenu());
+  let text = `📱 ${device.title}\n\n`;
+  text += `1) Откройте приложение Happ на ${device.name}\n\n`;
+  text += `2) Нажмите кнопку "+" в правом верхнем углу\n\n`;
+  text += `3) Скопируйте ссылку из раздела «Мои подписки»\n\n`;
+  text += `💡Если у вас оператор «Миранда», используйте вторую ссылку из подписки\n\n`;
+  text += `4) Выберите "вставить из буфера обмена"\n\n`;
+  text += `5) Нажмите кнопку "разрешить вставку"\n\n`;
+  text += `6) Нажмите "Import"\n\n`;
+  text += `7) После импорта нажмите на созданную конфигурацию\n\n`;
+  text += `8) Включите VPN-подключение кнопкой "Connect"\n\n`;
+  text += `✅ Готово! Ваш интернет работает через VPN.`;
+  
+  return text;
+}
+
+// Функция для получения видео файла по устройству
+function getVideoFileForDevice(deviceType) {
+  // Android и Android TV используют IMG_1021.mp4
+  if (deviceType === 'android' || deviceType === 'android_tv') {
+    return 'IMG_1021.mp4';
   }
-});
+  // iOS, macOS, Windows используют IMG_1019.mp4
+  return 'IMG_1019.mp4';
+}
+
+// Функция для создания меню внутри инструкции устройства
+function deviceInstructionMenu(deviceType) {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback("📹 Видео-инструкция", `guide_video_${deviceType}`)],
+    [Markup.button.callback("⬅️ Назад к выбору устройства", "instructions")],
+    [Markup.button.callback("⬅️ В меню", "back")],
+  ]);
+}
 
 // iOS / macOS
 bot.action("guide_ios", async (ctx) => {
   await ctx.answerCbQuery();
-  const text = getText("ios-macos.txt");
-  
-  if (!fs.existsSync('IMG_1019.mp4')) {
-    console.warn("Video file IMG_1019.mp4 not found");
-    await editOrAnswer(ctx, text, instructionsMenu());
-    return;
-  }
-  
-  try {
-    await ctx.sendVideo({ source: 'IMG_1019.mp4' }, { 
-      caption: text,
-      reply_markup: instructionsMenu().reply_markup
-    });
-  } catch (e) {
-    console.error("Error sending video:", e);
-    await editOrAnswer(ctx, text, instructionsMenu());
-  }
+  const text = getInstructionTextForDevice("ios");
+  await editOrAnswer(ctx, text, deviceInstructionMenu("ios"));
 });
 
 // Android
 bot.action("guide_android", async (ctx) => {
   await ctx.answerCbQuery();
-  const text = getText("android.txt");
-  
-  if (!fs.existsSync('IMG_1019.mp4')) {
-    console.warn("Video file IMG_1019.mp4 not found");
-    await editOrAnswer(ctx, text, instructionsMenu());
-    return;
-  }
-  
-  try {
-    await ctx.sendVideo({ source: 'IMG_1019.mp4' }, { 
-      caption: text,
-      reply_markup: instructionsMenu().reply_markup
-    });
-  } catch (e) {
-    console.error("Error sending video:", e);
-    await editOrAnswer(ctx, text, instructionsMenu());
-  }
+  const text = getInstructionTextForDevice("android");
+  await editOrAnswer(ctx, text, deviceInstructionMenu("android"));
+});
+
+// Android TV
+bot.action("guide_android_tv", async (ctx) => {
+  await ctx.answerCbQuery();
+  const text = getInstructionTextForDevice("android_tv");
+  await editOrAnswer(ctx, text, deviceInstructionMenu("android_tv"));
 });
 
 // Windows
 bot.action("guide_windows", async (ctx) => {
   await ctx.answerCbQuery();
-  const text = getText("windows.txt");
+  const text = getInstructionTextForDevice("windows");
+  await editOrAnswer(ctx, text, deviceInstructionMenu("windows"));
+});
+
+// macOS (отдельный обработчик для возврата из видео)
+bot.action("guide_macos", async (ctx) => {
+  await ctx.answerCbQuery();
+  const text = getInstructionTextForDevice("macos");
+  await editOrAnswer(ctx, text, deviceInstructionMenu("macos"));
+});
+
+// Динамическая видео-инструкция для каждого устройства
+bot.action(/^guide_video_(ios|android|android_tv|windows|macos)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const deviceType = ctx.match[1];
+  const videoFile = getVideoFileForDevice(deviceType);
   
-  if (!fs.existsSync('IMG_1019.mp4')) {
-    console.warn("Video file IMG_1019.mp4 not found");
-    await editOrAnswer(ctx, text, instructionsMenu());
+  const deviceNames = {
+    ios: "iPhone/macOS",
+    android: "Android",
+    android_tv: "Android TV",
+    windows: "Windows",
+    macos: "macOS"
+  };
+  
+  if (!fs.existsSync(videoFile)) {
+    console.warn(`Video file ${videoFile} not found`);
+    await ctx.reply(`❌ Видео-файл не найден на сервере. Используйте текстовые инструкции.`);
     return;
   }
   
   try {
-    await ctx.sendVideo({ source: 'IMG_1019.mp4' }, { 
-      caption: text,
-      reply_markup: instructionsMenu().reply_markup
-    });
+    await ctx.sendVideo(
+      { source: videoFile },
+      {
+        caption: `📹 Видео-инструкция для ${deviceNames[deviceType]}\n\nСмотрите подробное видео по настройке VPN.`,
+        reply_markup: Markup.inlineKeyboard([
+          [Markup.button.callback("⬅️ Назад к инструкции", `guide_${deviceType}`)],
+          [Markup.button.callback("⬅️ В меню", "back")]
+        ]).reply_markup
+      }
+    );
   } catch (e) {
     console.error("Error sending video:", e);
-    await editOrAnswer(ctx, text, instructionsMenu());
+    await ctx.reply("❌ Ошибка отправки видео. Используйте текстовые инструкции.");
   }
 });
     // Купить подписку — если нет средств, сразу ведём в пополнение
@@ -664,6 +694,7 @@ return tx.subscription.update({
     const keyboard = Markup.inlineKeyboard([
       [Markup.button.callback("🍎 iPhone (iOS)", `setup_choose_ios_${subscriptionId}`)],
       [Markup.button.callback("📱 Android", `setup_choose_android_${subscriptionId}`)],
+      [Markup.button.callback("📺 Android TV", `setup_choose_android_tv_${subscriptionId}`)],
       [Markup.button.callback("💻 Windows", `setup_choose_windows_${subscriptionId}`)],
       [Markup.button.callback("🖥️ macOS", `setup_choose_macos_${subscriptionId}`)],
       [Markup.button.callback("⬅️ Назад", "back")]
@@ -673,7 +704,7 @@ return tx.subscription.update({
   });
 
   // Шаг 2: После выбора устройства - скачать приложение
-  bot.action(/^setup_choose_(ios|android|windows|macos)_(\d+)$/, async (ctx) => {
+  bot.action(/^setup_choose_(ios|android|android_tv|windows|macos)_(\d+)$/, async (ctx) => {
     await ctx.answerCbQuery();
     const device = ctx.match[1];
     const subscriptionId = parseInt(ctx.match[2], 10);
@@ -689,6 +720,7 @@ return tx.subscription.update({
     const downloadLinks = {
       ios: "https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973",
       android: "https://play.google.com/store/apps/details?id=com.happproxy",
+      android_tv: "https://play.google.com/store/apps/details?id=com.happproxy",
       windows: "https://github.com/Happ-proxy/happ-desktop/releases/latest/download/setup-Happ.x64.exe",
       macos: "https://apps.apple.com/ru/app/happ-proxy-utility-plus/id6746188973"
     };
@@ -696,6 +728,7 @@ return tx.subscription.update({
     const deviceNames = {
       ios: "iPhone (iOS)",
       android: "Android",
+      android_tv: "Android TV",
       windows: "Windows",
       macos: "macOS"
     };
@@ -717,7 +750,7 @@ return tx.subscription.update({
   });
 
   // Шаг 3: После скачивания - пошаговая инструкция
-  bot.action(/^setup_downloaded_(ios|android|windows|macos)_(\d+)$/, async (ctx) => {
+  bot.action(/^setup_downloaded_(ios|android|android_tv|windows|macos)_(\d+)$/, async (ctx) => {
     await ctx.answerCbQuery();
     const device = ctx.match[1];
     const subscriptionId = parseInt(ctx.match[2], 10);
@@ -741,6 +774,7 @@ return tx.subscription.update({
       const deviceNames = {
         ios: { name: "iPhone", title: "Пошаговая настройка для iPhone:" },
         android: { name: "вашем устройстве", title: "Пошаговая настройка для Android:" },
+        android_tv: { name: "вашем Android TV", title: "Пошаговая настройка для Android TV:" },
         windows: { name: "вашем компьютере", title: "Пошаговая настройка для Windows:" },
         macos: { name: "вашем Mac", title: "Пошаговая настройка для macOS:" }
       };
@@ -774,10 +808,10 @@ return tx.subscription.update({
     // Формируем полное сообщение с инструкцией
     const fullMessage = getInstructionText(device, subscriptionUrl, subscriptionUrl2);
 
-    // Кнопки для инструкции
+    // Кнопки для инструкции (с учетом устройства для видео)
     const buttons = [
       [Markup.button.callback("✅ Я настроил VPN", `setup_complete_${subscriptionId}`)],
-      [Markup.button.callback("📹 Видео-инструкция", `setup_video_${subscriptionId}`)],
+      [Markup.button.callback("📹 Видео-инструкция", `setup_video_${device}_${subscriptionId}`)],
       [Markup.button.callback("⬅️ В меню", "back")]
     ];
 
@@ -787,10 +821,11 @@ return tx.subscription.update({
     setupStates.set(chatId, { subscriptionId, step: 'instructions', device, subscriptionUrl });
   });
 
-  // Обработчик для кнопки "Видео-инструкция" на этапе настройки
-  bot.action(/^setup_video_(\d+)$/, async (ctx) => {
+  // Обработчик для кнопки "Видео-инструкция" на этапе настройки (с учетом устройства)
+  bot.action(/^setup_video_(ios|android|android_tv|windows|macos)_(\d+)$/, async (ctx) => {
     await ctx.answerCbQuery();
-    const subscriptionId = parseInt(ctx.match[1], 10);
+    const deviceType = ctx.match[1];
+    const subscriptionId = parseInt(ctx.match[2], 10);
 
     // Проверяем подписку
     const sub = await prisma.subscription.findUnique({ where: { id: subscriptionId } });
@@ -798,9 +833,20 @@ return tx.subscription.update({
       return ctx.reply("Подписка не найдена.");
     }
 
+    // Выбираем видео файл в зависимости от устройства
+    const videoFile = (deviceType === 'android' || deviceType === 'android_tv') ? 'IMG_1021.mp4' : 'IMG_1019.mp4';
+    
+    const deviceNames = {
+      ios: "iPhone",
+      android: "Android",
+      android_tv: "Android TV",
+      windows: "Windows",
+      macos: "macOS"
+    };
+
     // Проверяем существование файла видео
-    if (!fs.existsSync('IMG_1019.mp4')) {
-      console.warn("Video file IMG_1019.mp4 not found");
+    if (!fs.existsSync(videoFile)) {
+      console.warn(`Video file ${videoFile} not found`);
       await ctx.reply("❌ Видео-файл не найден на сервере. Используйте текстовые инструкции.");
       return;
     }
@@ -808,9 +854,9 @@ return tx.subscription.update({
     try {
       // Отправляем видео с инструкцией
       await ctx.sendVideo(
-        { source: 'IMG_1019.mp4' },
+        { source: videoFile },
         {
-          caption: "📹 Видео-инструкция по настройке VPN\n\nСмотрите подробное видео по подключению к VPN сервису.",
+          caption: `📹 Видео-инструкция для ${deviceNames[deviceType]}\n\nСмотрите подробное видео по настройке VPN.`,
           reply_markup: Markup.inlineKeyboard([
             [Markup.button.callback("✅ Я настроил VPN", `setup_complete_${subscriptionId}`)],
             [Markup.button.callback("⬅️ В меню", "back")]

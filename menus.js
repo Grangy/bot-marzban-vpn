@@ -83,9 +83,9 @@ function infoMenu(balanceRub = 0) {
 
 function instructionsMenu() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback("📹 Видео-инструкция", "guide_video")],
     [Markup.button.callback("📱 iOS / macOS", "guide_ios")],
     [Markup.button.callback("🤖 Android", "guide_android")],
+    [Markup.button.callback("📺 Android TV", "guide_android_tv")],
     [Markup.button.callback("💻 Windows", "guide_windows")],
     [Markup.button.callback("⬅️ Назад", "back")],
   ]);
