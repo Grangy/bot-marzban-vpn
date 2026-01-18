@@ -69,10 +69,10 @@ async function getExtendedStats(startDate, endDate) {
  * Получить статистику купленных подписок за период
  */
 async function getSubscriptionStats(startDate, endDate) {
-  // Подписки созданные за период (кроме FREE и PROMO)
+  // Подписки созданные за период (только платные: M1, M3, M6, M12)
   const subscriptions = await prisma.subscription.findMany({
     where: {
-      type: { notIn: ["FREE", "PROMO"] },
+      type: { in: ["M1", "M3", "M6", "M12"] },
       createdAt: {
         gte: startDate,
         lte: endDate,
