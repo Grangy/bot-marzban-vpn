@@ -200,7 +200,7 @@ async function generateStatsMessage() {
 
   const text = `📊 <b>Статистика MaxGroot VPN</b>
 
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━
 
 💰 <b>ПОПОЛНЕНИЯ</b>
 
@@ -222,7 +222,7 @@ async function generateStatsMessage() {
 ├ 👥 Уникальных: ${monthStats.uniqueUsers}
 └ 📈 Средний чек: ${ruMoney(monthStats.avgAmount)}
 
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━
 
 👥 <b>ПОЛЬЗОВАТЕЛИ</b>
 
@@ -233,7 +233,7 @@ async function generateStatsMessage() {
 ├ 💰 Общий баланс: ${ruMoney(userStats.totalBalance)}
 └ ✅ Активных подписок: ${userStats.activeSubscriptions}
 
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━
 
 📦 <b>Купленные подписки (7 дней):</b>
 ├ 📅 1 месяц: ${weekSubStats.distribution.M1}
