@@ -141,7 +141,11 @@ function getVideoFileForDevice(deviceType) {
   if (deviceType === 'ios') {
     return 'IMG_1020.mp4';
   }
-  // macOS, Windows используют IMG_1019.mp4
+  // macOS использует IMG_1023.MOV
+  if (deviceType === 'macos') {
+    return 'IMG_1023.MOV';
+  }
+  // Windows использует IMG_1019.mp4
   return 'IMG_1019.mp4';
 }
 
@@ -935,6 +939,8 @@ return tx.subscription.update({
       videoFile = 'IMG_1021.mp4';
     } else if (deviceType === 'ios') {
       videoFile = 'IMG_1020.mp4';
+    } else if (deviceType === 'macos') {
+      videoFile = 'IMG_1023.MOV';
     } else {
       videoFile = 'IMG_1019.mp4';
     }
