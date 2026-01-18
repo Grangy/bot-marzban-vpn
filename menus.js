@@ -114,7 +114,7 @@ function mainMenu(balanceRub = 0) {
       Markup.button.callback("📋 Информация", "info")
     ],
     [
-      Markup.button.url("🛠 Тех.поддержка", "https://t.me/grangym")
+      Markup.button.url("🛠 Тех.поддержка", "https://t.me/supmaxgroot")
     ],
   ]);
 }

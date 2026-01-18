@@ -134,7 +134,7 @@ function createServer() {
           <h1>Обработка платежа</h1>
           <p><strong>Номер заказа:</strong> ${orderId}</p>
           <p>Платежная система временно недоступна. Обратитесь в поддержку для ручной обработки платежа.</p>
-          <p>Техподдержка: <a href="https://t.me/grangym">@grangym</a></p>
+          <p>Техподдержка: <a href="https://t.me/supmaxgroot">@supmaxgroot</a></p>
         </body>
       </html>
     `);
