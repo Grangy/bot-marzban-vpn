@@ -3,6 +3,7 @@ const { prisma } = require("./db");
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 const { v4: uuidv4 } = require("uuid");
 const bus = require("./events");
+const { logSuccessfulTopup, logFailedTopup } = require("./google-sheets");
 
 const API_URL        = process.env.PAYMENT_API_URL || "https://app.platega.io/transaction/process";
 const MERCHANT_ID    = process.env.PAYMENT_MERCHANT_ID || "FAKE";
@@ -212,6 +213,14 @@ async function markTopupSuccessAndCredit(topupId) {
 
   if (res.credited) {
     bus.emit("topup.success", { topupId: t.id });
+    
+    // Логируем в Google Sheets
+    try {
+      const user = await prisma.user.findUnique({ where: { id: t.userId } });
+      await logSuccessfulTopup(t, user);
+    } catch (err) {
+      console.error("[SHEETS] Ошибка логирования успешного пополнения:", err.message);
+    }
   }
 
   return { ok: true, ...res };
@@ -227,6 +236,15 @@ async function markTopupFailed(topupId) {
   }
 
   bus.emit("topup.failed", { topupId: t.id });
+  
+  // Логируем в Google Sheets
+  try {
+    const user = await prisma.user.findUnique({ where: { id: t.userId } });
+    await logFailedTopup(t, user);
+  } catch (err) {
+    console.error("[SHEETS] Ошибка логирования неуспешного пополнения:", err.message);
+  }
+  
   return { ok: true };
 }
 
