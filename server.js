@@ -2,8 +2,10 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
+const path = require("path");
 const { handlePostback, markTopupSuccessAndCredit, markTopupFailed } = require("./payment");
 const { registerWebAppAPI } = require("./webapp-api");
+const { registerBroadcastAPI } = require("./broadcast-api");
 
 function createServer() {
   const app = express();
@@ -12,11 +14,14 @@ function createServer() {
   app.use(cors({
     origin: "*", // В продакшене указать конкретные домены
     methods: ["GET", "POST", "PUT", "DELETE"],
-    allowedHeaders: ["Content-Type", "X-Webapp-Secret", "X-Telegram-Init-Data"]
+    allowedHeaders: ["Content-Type", "X-Webapp-Secret", "X-Telegram-Init-Data", "X-Admin-Secret"]
   }));
   
   app.use(bodyParser.json());
   app.use(bodyParser.urlencoded({ extended: true }));
+
+  // Статические файлы (для веб-интерфейса рассылок)
+  app.use(express.static(path.join(__dirname, "public")));
 
   app.get("/health", (req, res) => {
     res.status(200).send("✅ Payment server is running");
@@ -152,6 +157,9 @@ function createServer() {
 
   // Регистрируем Web App API
   registerWebAppAPI(app);
+
+  // Регистрируем Broadcast API (веб-интерфейс рассылок)
+  registerBroadcastAPI(app);
 
   return app;
 }

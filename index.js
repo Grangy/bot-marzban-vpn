@@ -7,6 +7,7 @@ const { startTopupCleaner } = require("./topupCleaner");
 const { startSubExpiryNotifier } = require("./subExpiryNotifier");
 const { startBackupScheduler } = require("./backup");
 const { initAdminNotifier } = require("./admin-notifier");
+const { initBroadcast } = require("./broadcast");
 
 
 const PORT = process.env.PAYMENT_PORT || 4000;
@@ -37,6 +38,10 @@ const PORT = process.env.PAYMENT_PORT || 4000;
   try {
     await bot.launch({ dropPendingUpdates: true });
     console.log("✅ Bot started and polling updates");
+    
+    // Инициализируем модуль рассылок
+    initBroadcast(bot);
+    console.log("✅ Broadcast module initialized");
   } catch (err) {
     console.error("❌ Bot launch failed:", err.message);
   }
