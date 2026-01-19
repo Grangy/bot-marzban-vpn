@@ -46,22 +46,37 @@ async function logPromoActivation(userId, promoType, promoId, code, success, err
 }
 
 // УЛУЧШЕНИЕ #3: Валидация промокода перед активацией
-function validatePromoCode(code) {
+// Для админских промокодов валидация мягкая (любая длина от 1 символа)
+// Для реферальных промокодов - строгая (4-32 символа)
+function validatePromoCode(code, strict = false) {
   if (!code || typeof code !== 'string') {
     return { valid: false, reason: "INVALID_FORMAT" };
   }
   
   const upperCode = code.toUpperCase().trim();
   
-  if (upperCode.length < 4 || upperCode.length > 32) {
+  // Минимальная длина - 1 символ для админских, 4 для реферальных
+  const minLength = strict ? 4 : 1;
+  const maxLength = 100; // Увеличиваем максимум для админских промокодов
+  
+  if (upperCode.length < minLength || upperCode.length > maxLength) {
     return { valid: false, reason: "INVALID_LENGTH" };
   }
   
-  if (!/^[A-Z0-9-]+$/.test(upperCode)) {
+  // Для админских промокодов разрешаем любые символы (кроме пробелов)
+  // Для реферальных - только A-Z0-9-
+  if (strict && !/^[A-Z0-9-]+$/.test(upperCode)) {
     return { valid: false, reason: "INVALID_CHARACTERS" };
   }
   
-  return { valid: true, normalizedCode: upperCode };
+  // Убираем пробелы и нормализуем
+  const normalizedCode = upperCode.replace(/\s+/g, '');
+  
+  if (normalizedCode.length < minLength) {
+    return { valid: false, reason: "INVALID_LENGTH" };
+  }
+  
+  return { valid: true, normalizedCode };
 }
 
 // УЛУЧШЕНИЕ #4: Получение статистики по промокоду
@@ -156,8 +171,8 @@ async function detectPromoType(code) {
     return cached;
   }
   
-  // Валидация кода
-  const validation = validatePromoCode(code);
+  // Мягкая валидация (для админских промокодов может быть любая длина)
+  const validation = validatePromoCode(code, false);
   if (!validation.valid) {
     return { type: null, promo: null };
   }
@@ -549,14 +564,14 @@ async function activatePromoCode(userId, code) {
   let promoType = null;
   
   try {
-    // УЛУЧШЕНИЕ #3: Валидация промокода
-    const validation = validatePromoCode(code);
+    // Мягкая валидация (для админских промокодов может быть любая длина)
+    const validation = validatePromoCode(code, false);
     if (!validation.valid) {
       await logPromoActivation(userId, "unknown", null, code, false, new Error("Invalid promo code format"));
       return { ok: false, message: "❌ Неверный формат промокода." };
     }
     
-    // Определяем тип промокода
+    // Определяем тип промокода (сначала пробуем найти в БД без строгой валидации)
     const { type, promo } = await detectPromoType(validation.normalizedCode);
     
     if (!type || !promo) {

@@ -196,17 +196,18 @@ function registerPromo(bot) {
 
     const text = ctx.message?.text?.trim() || "";
     
-    // Проверяем формат промокода: только A-Z0-9 и дефис, длина 4-32 символа
-    // Убираем пробелы для обработки вариантов типа "010BA823" или "010 BA 823"
+    // Проверяем формат промокода: только A-Z0-9 и дефис, длина от 1 символа (для админских может быть любой)
+    // Убираем пробелы для обработки вариантов типа "010BA823" или "010 BA 823" или "444"
     const cleanText = text.replace(/\s+/g, "");
-    const promoMatch = cleanText.match(/^([A-Z0-9-]{4,32})$/i);
+    // Минимум 1 символ, максимум 100 (для админских промокодов может быть любой)
+    const promoMatch = cleanText.match(/^([A-Z0-9-]{1,100})$/i);
     
     if (!promoMatch) {
       // Если текст не похож на промокод, удаляем из ожидания
       waitingForPromoCode.delete(chatId);
       return next();
     }
-
+    
     // Удаляем пользователя из ожидающих
     waitingForPromoCode.delete(chatId);
 
@@ -236,12 +237,13 @@ function registerPromo(bot) {
     waitingForPromoCode.delete(chatId);
 
     const raw = ctx.message?.text || "";
-    const match = raw.trim().match(/^\/promo(?:@\w+)?\s+([A-Z0-9-]{4,32})$/i);
+    // Минимум 1 символ для поддержки админских промокодов любой длины (например "444")
+    const match = raw.trim().match(/^\/promo(?:@\w+)?\s+([A-Z0-9-]{1,100})$/i);
 
     if (!match) {
       // Если команда без кода, добавляем в ожидающие
       waitingForPromoCode.add(chatId);
-      return ctx.reply("✍️ Введите промокод:\n\nВы можете ввести:\n• Просто промокод: `010BA823`\n• Или команду: `/promo 010BA823`");
+      return ctx.reply("✍️ Введите промокод:\n\nВы можете ввести:\n• Просто промокод: `010BA823` или `444`\n• Или команду: `/promo 010BA823` или `/promo 444`");
     }
 
     const inputCode = match[1].toUpperCase();
