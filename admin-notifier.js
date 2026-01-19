@@ -336,17 +336,23 @@ function initAdminNotifier(bot) {
       }
       
       try {
-        // Генерируем код: кастомный или автогенерируемый
-        // Для промокодов на дни можно использовать кастомный код или автогенерируемый
+        // Если указано название, используем его как код промокода
         let code;
-        let attempts = 0;
-        while (attempts < 5) {
-          if (customName && customName.length <= 8 && /^[A-Z0-9-]+$/i.test(customName)) {
-            // Если название короткое и подходит как код, используем его
-            code = customName.toUpperCase();
-            customName = null; // Не используем как название, так как это код
-          } else {
-            code = "GIFT" + crypto.randomBytes(4).toString("hex").toUpperCase();
+        if (customName) {
+          // Используем название как код (нормализуем: убираем пробелы, верхний регистр)
+          code = customName.toUpperCase().replace(/\s+/g, '');
+          
+          // Валидация кода (должен содержать только буквы, цифры и дефисы, минимум 1 символ)
+          if (code.length === 0) {
+            return ctx.reply("❌ Название промокода не может быть пустым.");
+          }
+          
+          if (code.length > 100) {
+            return ctx.reply("❌ Код промокода не должен превышать 100 символов.");
+          }
+          
+          if (!/^[A-Z0-9-]+$/.test(code)) {
+            return ctx.reply("❌ Код промокода может содержать только буквы (A-Z), цифры (0-9) и дефисы (-).");
           }
           
           // Проверяем уникальность
@@ -354,16 +360,39 @@ function initAdminNotifier(bot) {
             where: { code }
           });
           
-          if (!existing) {
-            break;
+          if (existing) {
+            return ctx.reply(`❌ Промокод с кодом <code>${code}</code> уже существует.`, { parse_mode: "HTML" });
           }
           
-          attempts++;
-          code = "GIFT" + crypto.randomBytes(4).toString("hex").toUpperCase();
-        }
-        
-        if (attempts >= 5) {
-          return ctx.reply("❌ Не удалось создать уникальный код. Попробуйте еще раз.");
+          // Проверяем, не используется ли код как реферальный
+          const existingUser = await prisma.user.findUnique({
+            where: { promoCode: code }
+          });
+          
+          if (existingUser) {
+            return ctx.reply(`❌ Код <code>${code}</code> уже используется как реферальный промокод.`, { parse_mode: "HTML" });
+          }
+        } else {
+          // Если название не указано, генерируем автоматически
+          let attempts = 0;
+          while (attempts < 5) {
+            code = "GIFT" + crypto.randomBytes(4).toString("hex").toUpperCase();
+            
+            // Проверяем уникальность
+            const existing = await prisma.adminPromo.findUnique({
+              where: { code }
+            });
+            
+            if (!existing) {
+              break;
+            }
+            
+            attempts++;
+          }
+          
+          if (attempts >= 5) {
+            return ctx.reply("❌ Не удалось создать уникальный код. Попробуйте еще раз.");
+          }
         }
         
         await prisma.adminPromo.create({
@@ -372,13 +401,16 @@ function initAdminNotifier(bot) {
             type: "DAYS",
             days,
             isReusable,
-            customName: customName || null,
+            customName: customName || null, // Сохраняем оригинальное название для отображения
             createdBy: String(ctx.from?.id || "unknown"),
           },
         });
         
         const reusableText = isReusable ? "🔄 Многоразовый" : "⚠️ Одноразовый";
-        const nameText = customName ? `\n📝 Название: <b>${customName}</b>` : "";
+        // Если название использовалось как код, показываем его как название, иначе показываем отдельно
+        const nameText = customName && code === customName.toUpperCase().replace(/\s+/g, '') 
+          ? `\n📝 Название: <b>${customName}</b>` 
+          : (customName ? `\n📝 Название: <b>${customName}</b>` : "");
         
         const msg = `✅ <b>Промокод создан!</b>
 

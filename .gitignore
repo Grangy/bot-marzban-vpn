@@ -21,3 +21,6 @@ token.json
 table-484713-7d2b62fb7e2e.json
 # Конфиденциальная документация с ключами
 API_DOCUMENTATION.md
+# Документация (можно добавить обратно, если нужна в Git)
+# PROMO_API_DOCUMENTATION.md
+# PROMO_SYSTEM_UPDATE.md
