@@ -302,6 +302,23 @@
             border-radius: 3px;
             font-family: monospace;
         }
+
+        .header button {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 6px;
+            color: white;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s;
+        }
+
+        .header button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
     </style>
 </head>
 <body>
@@ -309,6 +326,7 @@
         <div class="header">
             <h1>📢 Панель рассылок MaxGroot</h1>
             <p>Управление рассылкой сообщений пользователям бота</p>
+            <button onclick="resetAdminSecret()">Сбросить ключ</button>
         </div>
 
         <div class="content">
@@ -398,12 +416,38 @@
 
     <script>
         const API_URL = window.location.origin;
-        const ADMIN_SECRET = prompt('Введите секретный ключ админа:') || '';
+        const STORAGE_KEY = 'maxgroot_broadcast_admin_secret';
 
-        if (!ADMIN_SECRET) {
-            alert('Секретный ключ обязателен!');
+        // Получаем или запрашиваем секретный ключ
+        function getAdminSecret() {
+            // Проверяем localStorage
+            let secret = localStorage.getItem(STORAGE_KEY);
+            
+            if (!secret) {
+                // Запрашиваем ключ
+                secret = prompt('Введите секретный ключ админа:') || '';
+                
+                if (secret) {
+                    // Сохраняем в localStorage
+                    localStorage.setItem(STORAGE_KEY, secret);
+                } else {
+                    alert('Секретный ключ обязателен!');
+                    window.location.reload();
+                    return null;
+                }
+            }
+            
+            return secret;
+        }
+
+        // Функция для сброса ключа (можно вызвать из консоли: resetAdminSecret())
+        function resetAdminSecret() {
+            localStorage.removeItem(STORAGE_KEY);
+            alert('Ключ удален. Страница будет перезагружена.');
             window.location.reload();
         }
+
+        const ADMIN_SECRET = getAdminSecret();
 
         // Загрузка статистики
         async function loadStats() {
@@ -415,12 +459,26 @@
                 });
                 const data = await response.json();
                 
-                if (data.ok) {
-                    document.getElementById('totalUsers').textContent = data.stats.totalUsers;
-                    document.getElementById('activeUsers').textContent = data.stats.activeUsers;
+                if (data.ok && data.stats) {
+                    const totalUsersEl = document.getElementById('totalUsers');
+                    const activeUsersEl = document.getElementById('activeUsers');
+                    
+                    // Безопасная установка значений
+                    if (totalUsersEl) {
+                        totalUsersEl.textContent = data.stats.totalUsers || 0;
+                    }
+                    if (activeUsersEl) {
+                        activeUsersEl.textContent = data.stats.activeUsers || 0;
+                    }
                 }
             } catch (error) {
                 console.error('Ошибка загрузки статистики:', error);
+                // Если ошибка авторизации - сбрасываем ключ
+                if (error.message.includes('401') || error.message.includes('UNAUTHORIZED')) {
+                    console.warn('Неверный ключ. Очищаем localStorage...');
+                    localStorage.removeItem(STORAGE_KEY);
+                    alert('Неверный секретный ключ. Пожалуйста, обновите страницу и введите правильный ключ.');
+                }
             }
         }
 
@@ -514,44 +572,91 @@
                     const resultsTitle = document.getElementById('resultsTitle');
                     const resultsContent = document.getElementById('resultsContent');
 
-                    resultsTitle.textContent = `✅ Рассылка завершена`;
-                    resultsContent.innerHTML = `
-                        <p><strong>Всего получателей:</strong> ${results.total}</p>
-                        <p><strong>Успешно отправлено:</strong> ${results.sent}</p>
-                        <p><strong>Ошибок:</strong> ${results.failed}</p>
-                        ${results.errors.length > 0 ? `
-                            <h4>Ошибки (первые 10):</h4>
-                            <ul>
-                                ${results.errors.map(e => `<li>ID ${e.telegramId}: ${e.message || e.error}</li>`).join('')}
-                            </ul>
-                        ` : ''}
-                    `;
+                    if (resultsDiv) {
+                        if (resultsTitle) {
+                            resultsTitle.textContent = `✅ Рассылка завершена`;
+                        }
+                        if (resultsContent) {
+                            resultsContent.innerHTML = `
+                                <p><strong>Всего получателей:</strong> ${results.total}</p>
+                                <p><strong>Успешно отправлено:</strong> ${results.sent}</p>
+                                <p><strong>Ошибок:</strong> ${results.failed}</p>
+                                ${results.errors && results.errors.length > 0 ? `
+                                    <h4>Ошибки (первые 10):</h4>
+                                    <ul>
+                                        ${results.errors.map(e => `<li>ID ${e.telegramId}: ${e.message || e.error}</li>`).join('')}
+                                    </ul>
+                                ` : ''}
+                            `;
+                        } else {
+                            // Если нет resultsContent, устанавливаем напрямую в resultsDiv
+                            resultsDiv.innerHTML = `
+                                <h3>✅ Рассылка завершена</h3>
+                                <p><strong>Всего получателей:</strong> ${results.total}</p>
+                                <p><strong>Успешно отправлено:</strong> ${results.sent}</p>
+                                <p><strong>Ошибок:</strong> ${results.failed}</p>
+                                ${results.errors && results.errors.length > 0 ? `
+                                    <h4>Ошибки (первые 10):</h4>
+                                    <ul>
+                                        ${results.errors.map(e => `<li>ID ${e.telegramId}: ${e.message || e.error}</li>`).join('')}
+                                    </ul>
+                                ` : ''}
+                            `;
+                        }
 
-                    resultsDiv.classList.add('success');
-                    resultsDiv.style.display = 'block';
+                        resultsDiv.classList.add('success');
+                        resultsDiv.style.display = 'block';
+                    }
 
                     // Обновляем статистику
                     loadStats();
                 } else {
                     const resultsDiv = document.getElementById('results');
+                    const resultsTitle = document.getElementById('resultsTitle');
+                    const resultsContent = document.getElementById('resultsContent');
+                    
+                    // Проверяем существование элементов
+                    if (resultsDiv && resultsTitle && resultsContent) {
+                        resultsTitle.textContent = '❌ Ошибка';
+                        resultsContent.innerHTML = `<p>${data.message || data.error}</p>`;
+                        resultsDiv.classList.add('error');
+                        resultsDiv.style.display = 'block';
+                    } else if (resultsDiv) {
+                        // Если нет вложенных элементов, устанавливаем напрямую
+                        resultsDiv.innerHTML = `
+                            <h3>❌ Ошибка</h3>
+                            <p>${data.message || data.error}</p>
+                        `;
+                        resultsDiv.classList.add('error');
+                        resultsDiv.style.display = 'block';
+                    }
+                    
+                    // Если ошибка авторизации - сбрасываем ключ
+                    if (data.error === 'UNAUTHORIZED') {
+                        localStorage.removeItem(STORAGE_KEY);
+                        alert('Неверный секретный ключ. Пожалуйста, обновите страницу и введите правильный ключ.');
+                    }
+                }
+            } catch (error) {
+                document.getElementById('loading').classList.remove('active');
+                const sendBtn = document.getElementById('sendBtn');
+                if (sendBtn) sendBtn.disabled = false;
+
+                const resultsDiv = document.getElementById('results');
+                if (resultsDiv) {
                     resultsDiv.innerHTML = `
-                        <h3>❌ Ошибка</h3>
-                        <p>${data.message || data.error}</p>
+                        <h3>❌ Ошибка соединения</h3>
+                        <p>${error.message}</p>
                     `;
                     resultsDiv.classList.add('error');
                     resultsDiv.style.display = 'block';
                 }
-            } catch (error) {
-                document.getElementById('loading').classList.remove('active');
-                document.getElementById('sendBtn').disabled = false;
-
-                const resultsDiv = document.getElementById('results');
-                resultsDiv.innerHTML = `
-                    <h3>❌ Ошибка соединения</h3>
-                    <p>${error.message}</p>
-                `;
-                resultsDiv.classList.add('error');
-                resultsDiv.style.display = 'block';
+                
+                // Если ошибка авторизации - сбрасываем ключ
+                if (error.message.includes('401') || error.message.includes('UNAUTHORIZED')) {
+                    localStorage.removeItem(STORAGE_KEY);
+                    alert('Неверный секретный ключ. Пожалуйста, обновите страницу и введите правильный ключ.');
+                }
             }
         });
 
