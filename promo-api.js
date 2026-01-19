@@ -76,35 +76,58 @@ function registerPromoAPI(app) {
         });
       }
 
-      // Формируем ответ в зависимости от типа промокода
+      // Формируем детальный ответ в зависимости от типа промокода
       const responseData = {
-        type: result.type,
-        message: result.message
+        promoType: result.type, // Тип промокода: "referral", "admin_balance", "admin_days"
+        promoCategory: result.type === PROMO_TYPES.ADMIN_BALANCE ? "money" : 
+                      (result.type === PROMO_TYPES.ADMIN_DAYS ? "days" : "referral"), // Категория: "money", "days", "referral"
+        message: result.message,
+        code: upperCode
       };
 
-      // Для промокодов на баланс добавляем информацию о балансе
+      // Для промокодов на баланс (деньги)
       if (result.type === PROMO_TYPES.ADMIN_BALANCE && result.data?.amount) {
         const updatedUser = await prisma.user.findUnique({
           where: { id: user.id },
           select: { balance: true }
         });
-        responseData.amount = result.data.amount;
-        responseData.balance = updatedUser.balance;
+        responseData.reward = {
+          type: "balance",
+          amount: result.data.amount,
+          currency: "RUB"
+        };
+        responseData.balance = {
+          current: updatedUser.balance,
+          currency: "RUB"
+        };
       }
 
-      // Для промокодов на дни добавляем информацию о подписке
+      // Для промокодов на дни (подписка)
       if (result.type === PROMO_TYPES.ADMIN_DAYS || result.type === PROMO_TYPES.REFERRAL) {
         if (result.data?.subscriptionId) {
           const subscription = await prisma.subscription.findUnique({
             where: { id: result.data.subscriptionId },
-            select: { subscriptionUrl: true, subscriptionUrl2: true, endDate: true }
+            select: { 
+              subscriptionUrl: true, 
+              subscriptionUrl2: true, 
+              endDate: true,
+              startDate: true
+            }
           });
+          
+          responseData.reward = {
+            type: "subscription",
+            days: result.data.days || (result.type === PROMO_TYPES.REFERRAL ? 3 : null),
+            startDate: subscription?.startDate,
+            endDate: subscription?.endDate
+          };
+          
           responseData.subscription = {
             id: result.data.subscriptionId,
             subscriptionUrl: subscription?.subscriptionUrl,
             subscriptionUrl2: subscription?.subscriptionUrl2,
-            endDate: subscription?.endDate,
-            days: result.data.days
+            startDate: subscription?.startDate,
+            endDate: subscription?.endDate
           };
         }
       }
