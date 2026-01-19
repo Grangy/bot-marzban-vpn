@@ -578,6 +578,66 @@ ${isReusable ? "✅ Промокод многоразовый - можно ис�
     }
   });
 
+  // Уведомление о неуспешном пополнении (FAILED)
+  bus.on("topup.failed", async ({ topupId }) => {
+    try {
+      const topup = await prisma.topUp.findUnique({ where: { id: topupId } });
+      if (!topup) return;
+
+      const user = await prisma.user.findUnique({ where: { id: topup.userId } });
+
+      const username = user?.accountName || "Без username";
+      const telegramId = user?.telegramId || "N/A";
+
+      const text = `❌ <b>Неоплаченный заказ</b>
+
+👤 Пользователь: ${username}
+🆔 Telegram ID: <code>${telegramId}</code>
+💵 Сумма: <b>${ruMoney(topup.amount)}</b>
+📋 ID заказа: <code>${topup.orderId}</code>
+📅 Создан: ${formatDate(topup.createdAt)}
+⏰ Обновлен: ${formatDate(topup.updatedAt)}
+
+🚫 Статус: <b>Отменен</b>
+💡 Причина: Пользователь отменил оплату или не завершил транзакцию`;
+
+      await sendToAdminGroup(text);
+      console.log(`[ADMIN] Failed topup notification sent for topup=${topupId}`);
+    } catch (err) {
+      console.error("[ADMIN] Ошибка уведомления о неуспешном пополнении:", err.message);
+    }
+  });
+
+  // Уведомление о просроченном пополнении (TIMEOUT)
+  bus.on("topup.timeout", async ({ topupId }) => {
+    try {
+      const topup = await prisma.topUp.findUnique({ where: { id: topupId } });
+      if (!topup) return;
+
+      const user = await prisma.user.findUnique({ where: { id: topup.userId } });
+
+      const username = user?.accountName || "Без username";
+      const telegramId = user?.telegramId || "N/A";
+
+      const text = `⏳ <b>Просроченный заказ</b>
+
+👤 Пользователь: ${username}
+🆔 Telegram ID: <code>${telegramId}</code>
+💵 Сумма: <b>${ruMoney(topup.amount)}</b>
+📋 ID заказа: <code>${topup.orderId}</code>
+📅 Создан: ${formatDate(topup.createdAt)}
+⏰ Истек: ${formatDate(new Date())}
+
+🚫 Статус: <b>Истек срок оплаты</b>
+💡 Причина: Заказ не был оплачен в течение 30 минут`;
+
+      await sendToAdminGroup(text);
+      console.log(`[ADMIN] Timeout topup notification sent for topup=${topupId}`);
+    } catch (err) {
+      console.error("[ADMIN] Ошибка уведомления о просроченном пополнении:", err.message);
+    }
+  });
+
   // Запуск ежедневной статистики в 20:00
   scheduleDaily(20, 0, () => sendStats());
 
