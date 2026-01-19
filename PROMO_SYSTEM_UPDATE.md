@@ -52,13 +52,50 @@ npm install
 - Сохраняет все существующие промокоды (они будут типа BALANCE)
 - Создает новую таблицу `AdminPromoActivation` для отслеживания активаций
 
-```bash
-# Примените миграцию
-npx prisma migrate deploy
+#### Вариант A: Автоматический скрипт (рекомендуется)
 
-# Если возникнет ошибка "database is locked", остановите все процессы:
-# pm2 stop all
-# Затем повторите команду выше
+```bash
+# Используйте готовый скрипт, который автоматически:
+# - Создаст бэкап
+# - Сделает baseline существующих миграций
+# - Применит только новую миграцию
+# - Проверит результат
+
+bash apply-promo-migration-safe.sh
+```
+
+#### Вариант B: Ручное применение
+
+Если вы получили ошибку **P3005** ("The database schema is not empty"), выполните:
+
+```bash
+# 1. Сделайте baseline для всех существующих миграций
+npx prisma migrate resolve --applied 20250920090156_init
+npx prisma migrate resolve --applied 20250920090822_add_subscription
+npx prisma migrate resolve --applied 20250920091722_add_subscription2
+npx prisma migrate resolve --applied 20250920092239_add_balance_subs_enum_topups
+npx prisma migrate resolve --applied 20250920095543_add_subscription_url
+npx prisma migrate resolve --applied 20250920114234_update_topup
+npx prisma migrate resolve --applied 20250920115006_update_topup
+npx prisma migrate resolve --applied 20250920120742_add_topup_credited_fields
+npx prisma migrate resolve --applied 20250922192610_add_promocodes
+npx prisma migrate resolve --applied 20250925142719_add_subscription_reminders
+npx prisma migrate resolve --applied 20260116192259_add_subscription_url2
+
+# 2. Примените новую миграцию
+npx prisma migrate deploy
+```
+
+**Если возникнет ошибка "database is locked":**
+```bash
+# Остановите все процессы
+pm2 stop all
+
+# Подождите 5 секунд
+sleep 5
+
+# Повторите команду
+npx prisma migrate deploy
 ```
 
 ### 6. Сгенерируйте Prisma Client
