@@ -69,9 +69,27 @@ function registerPromo(bot) {
   // Экран промокода
   bot.action("promo", async (ctx) => {
     await ctx.answerCbQuery();
+    
+    // Проверяем, что пользователь инициализирован
+    if (!ctx.dbUser || !ctx.dbUser.id) {
+      console.error("[PROMO] ctx.dbUser is undefined in promo action");
+      return ctx.reply("❌ Ошибка инициализации. Попробуйте еще раз.");
+    }
+    
     // Убираем пользователя из ожидающих промокод (если был)
     const chatId = String(ctx.chat?.id || ctx.from?.id);
     waitingForPromoCode.delete(chatId);
+    
+    // Получаем пользователя из БД для доступа к promoCode
+    const me = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+    
+    if (!me) {
+      return ctx.reply("❌ Пользователь не найден. Попробуйте еще раз.");
+    }
+    
+    if (!me.promoCode) {
+      return ctx.reply("❌ Промокод не найден. Попробуйте перезапустить бота командой /start");
+    }
     
     // Получаем статистику промокода через новый модуль
     const stats = await getUserPromoStats(ctx.dbUser.id);
