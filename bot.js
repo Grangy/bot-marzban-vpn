@@ -71,7 +71,18 @@ function genPromo() {
 
 /* Команды */
 bot.start(async (ctx) => {
+  // Проверяем, что пользователь был создан в middleware
+  if (!ctx.dbUser || !ctx.dbUser.id) {
+    console.error("[BOT] ctx.dbUser is undefined in /start command");
+    return ctx.reply("❌ Ошибка инициализации. Попробуйте еще раз.");
+  }
+  
   const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+  
+  if (!user) {
+    console.error("[BOT] User not found in database:", ctx.dbUser.id);
+    return ctx.reply("❌ Пользователь не найден. Попробуйте еще раз.");
+  }
   
   const welcomeText = `👋 Вас приветствует MaxGroot!
 
@@ -93,7 +104,19 @@ bot.start(async (ctx) => {
 });
 
 bot.command("menu", async (ctx) => {
+  // Проверяем, что пользователь был создан в middleware
+  if (!ctx.dbUser || !ctx.dbUser.id) {
+    console.error("[BOT] ctx.dbUser is undefined in /menu command");
+    return ctx.reply("❌ Ошибка инициализации. Попробуйте еще раз.");
+  }
+  
   const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+  
+  if (!user) {
+    console.error("[BOT] User not found in database:", ctx.dbUser.id);
+    return ctx.reply("❌ Пользователь не найден. Попробуйте еще раз.");
+  }
+  
   await ctx.reply("Меню:", mainMenu(user.balance));
 });
 

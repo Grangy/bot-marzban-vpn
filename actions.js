@@ -29,6 +29,15 @@
   const setupStates = new Map();
 
 
+  /* Утилита: проверка ctx.dbUser */
+  function ensureDbUser(ctx) {
+    if (!ctx.dbUser || !ctx.dbUser.id) {
+      console.error("[ACTIONS] ctx.dbUser is undefined for user:", ctx.from?.id);
+      throw new Error("User not initialized. Please try again.");
+    }
+    return ctx.dbUser;
+  }
+
   /* Утилита: безопасное редактирование сообщения */
   async function editOrAnswer(ctx, text, keyboard) {
     try {
@@ -62,6 +71,11 @@
     // Назад — главное меню (регистрируем первым)
     bot.action("back", async (ctx) => {
       await ctx.answerCbQuery();
+      try {
+        ensureDbUser(ctx);
+      } catch (e) {
+        return ctx.reply("❌ Ошибка инициализации. Попробуйте еще раз.");
+      }
       const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
       
       try {

@@ -14,6 +14,12 @@ const waitingForPromoCode = new Set();
 // Функция для активации админского промокода на баланс
 async function activateAdminPromo(ctx, code) {
   try {
+    // Проверяем, что пользователь инициализирован
+    if (!ctx.dbUser || !ctx.dbUser.id) {
+      console.error("[PROMO] ctx.dbUser is undefined in activateAdminPromo");
+      return { ok: false, message: "❌ Ошибка инициализации. Попробуйте еще раз." };
+    }
+    
     const result = await prisma.$transaction(async (tx) => {
       // Ищем промокод
       const promo = await tx.adminPromo.findUnique({
@@ -74,6 +80,12 @@ async function activateAdminPromo(ctx, code) {
 // Функция для активации промокода (вынесена для переиспользования)
 async function activatePromoCode(ctx, inputCode) {
   try {
+    // Проверяем, что пользователь инициализирован
+    if (!ctx.dbUser || !ctx.dbUser.id) {
+      console.error("[PROMO] ctx.dbUser is undefined in activatePromoCode");
+      return { ok: false, message: "❌ Ошибка инициализации. Попробуйте еще раз." };
+    }
+    
     const upperCode = inputCode.toUpperCase();
     
     // Сначала проверяем, не админский ли это промокод (GIFT...)
