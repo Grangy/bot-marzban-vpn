@@ -287,7 +287,10 @@ function initAdminNotifier(bot) {
     await sendStats(chatId);
   });
 
-  // Команда /createpromo <сумма> - создать промокод на баланс
+  // Команда /createpromo - создать промокод
+  // Варианты:
+  //   /createpromo <сумма> - одноразовый промокод на баланс
+  //   /createpromo days <дни> [название] [--reusable] - промокод на дни (с опциональным названием и многоразовостью)
   bot.command("createpromo", async (ctx) => {
     const chatId = String(ctx.chat.id);
     
@@ -297,48 +300,173 @@ function initAdminNotifier(bot) {
     }
     
     const text = ctx.message?.text || "";
-    const match = text.match(/^\/createpromo\s+(\d+)$/);
+    const crypto = require("crypto");
     
-    if (!match) {
-      return ctx.reply("❌ Использование: /createpromo <сумма>\n\nПример: /createpromo 500");
+    // Проверяем формат для дней: /createpromo days <число> [название] [--reusable]
+    const daysMatch = text.match(/^\/createpromo\s+days\s+(\d+)(?:\s+(.+))?\s*$/i);
+    
+    if (daysMatch) {
+      // Создаем промокод на дни
+      const days = parseInt(daysMatch[1], 10);
+      const restOfText = (daysMatch[2] || "").trim();
+      const isReusable = restOfText.toLowerCase().includes('--reusable');
+      
+      // Извлекаем кастомное название (убираем --reusable если он есть)
+      let customName = null;
+      if (restOfText) {
+        const parts = restOfText.split(/\s+/).filter(p => {
+          const lower = p.toLowerCase();
+          return lower !== '--reusable' && lower !== 'reusable';
+        });
+        if (parts.length > 0) {
+          customName = parts.join(' ').trim();
+          if (!customName || customName.length === 0) {
+            customName = null;
+          }
+        }
+      }
+      
+      if (days < 1 || days > 365) {
+        return ctx.reply("❌ Количество дней должно быть от 1 до 365");
+      }
+      
+      // Валидация кастомного названия (если указано)
+      if (customName && customName.length > 100) {
+        return ctx.reply("❌ Название промокода не должно превышать 100 символов");
+      }
+      
+      try {
+        // Генерируем код: кастомный или автогенерируемый
+        // Для промокодов на дни можно использовать кастомный код или автогенерируемый
+        let code;
+        let attempts = 0;
+        while (attempts < 5) {
+          if (customName && customName.length <= 8 && /^[A-Z0-9-]+$/i.test(customName)) {
+            // Если название короткое и подходит как код, используем его
+            code = customName.toUpperCase();
+            customName = null; // Не используем как название, так как это код
+          } else {
+            code = "GIFT" + crypto.randomBytes(4).toString("hex").toUpperCase();
+          }
+          
+          // Проверяем уникальность
+          const existing = await prisma.adminPromo.findUnique({
+            where: { code }
+          });
+          
+          if (!existing) {
+            break;
+          }
+          
+          attempts++;
+          code = "GIFT" + crypto.randomBytes(4).toString("hex").toUpperCase();
+        }
+        
+        if (attempts >= 5) {
+          return ctx.reply("❌ Не удалось создать уникальный код. Попробуйте еще раз.");
+        }
+        
+        await prisma.adminPromo.create({
+          data: {
+            code,
+            type: "DAYS",
+            days,
+            isReusable,
+            customName: customName || null,
+            createdBy: String(ctx.from?.id || "unknown"),
+          },
+        });
+        
+        const reusableText = isReusable ? "🔄 Многоразовый" : "⚠️ Одноразовый";
+        const nameText = customName ? `\n📝 Название: <b>${customName}</b>` : "";
+        
+        const msg = `✅ <b>Промокод создан!</b>
+
+🎁 Код: <code>${code}</code>${nameText}
+📅 Дней подписки: <b>${days}</b>
+${reusableText}
+
+📋 Для активации пользователь должен ввести:
+<code>/promo ${code}</code>
+
+${isReusable ? "✅ Промокод многоразовый - можно использовать несколько раз разными пользователями!" : "⚠️ Код одноразовый, после использования станет недействительным."}`;
+        
+        await ctx.reply(msg, { parse_mode: "HTML" });
+        console.log(`[ADMIN] Created promo code ${code} for ${days} days (reusable: ${isReusable}, customName: ${customName || 'none'}) by ${ctx.from?.id}`);
+      } catch (err) {
+        console.error("[ADMIN] Error creating promo:", err);
+        if (err.code === 'P2002') {
+          await ctx.reply(`❌ Промокод с таким кодом уже существует`, { parse_mode: "HTML" });
+        } else {
+          await ctx.reply("❌ Ошибка создания промокода: " + err.message);
+        }
+      }
+      return;
     }
     
-    const amount = parseInt(match[1], 10);
+    // Проверяем формат для баланса: /createpromo <сумма>
+    const balanceMatch = text.match(/^\/createpromo\s+(\d+)$/);
     
-    if (amount < 1 || amount > 100000) {
-      return ctx.reply("❌ Сумма должна быть от 1 до 100000 ₽");
-    }
-    
-    try {
-      // Генерируем уникальный код
-      const crypto = require("crypto");
-      const code = "GIFT" + crypto.randomBytes(4).toString("hex").toUpperCase();
+    if (balanceMatch) {
+      const amount = parseInt(balanceMatch[1], 10);
       
-      // Создаём промокод в БД
-      await prisma.adminPromo.create({
-        data: {
-          code,
-          amount,
-          createdBy: String(ctx.from?.id || "unknown"),
-        },
-      });
+      if (amount < 1 || amount > 100000) {
+        return ctx.reply("❌ Сумма должна быть от 1 до 100000 ₽");
+      }
       
-      const msg = `✅ <b>Промокод создан!</b>
+      try {
+        const code = "GIFT" + crypto.randomBytes(4).toString("hex").toUpperCase();
+        
+        await prisma.adminPromo.create({
+          data: {
+            code,
+            type: "BALANCE",
+            amount,
+            isReusable: false,
+            createdBy: String(ctx.from?.id || "unknown"),
+          },
+        });
+        
+        const msg = `✅ <b>Промокод создан!</b>
 
 🎁 Код: <code>${code}</code>
 💵 Номинал: <b>${ruMoney(amount)}</b>
+🔄 Тип: Одноразовый (на баланс)
 
 📋 Для активации пользователь должен ввести:
 <code>/promo ${code}</code>
 
 ⚠️ Код одноразовый, после использования станет недействительным.`;
-      
-      await ctx.reply(msg, { parse_mode: "HTML" });
-      console.log(`[ADMIN] Created promo code ${code} for ${amount}₽ by ${ctx.from?.id}`);
-    } catch (err) {
-      console.error("[ADMIN] Error creating promo:", err);
-      await ctx.reply("❌ Ошибка создания промокода: " + err.message);
+        
+        await ctx.reply(msg, { parse_mode: "HTML" });
+        console.log(`[ADMIN] Created promo code ${code} for ${amount}₽ by ${ctx.from?.id}`);
+      } catch (err) {
+        console.error("[ADMIN] Error creating promo:", err);
+        await ctx.reply("❌ Ошибка создания промокода: " + err.message);
+      }
+      return;
     }
+    
+    // Если формат не распознан
+    return ctx.reply(`❌ Неверный формат команды.
+
+📋 Использование:
+• <code>/createpromo &lt;сумма&gt;</code> - промокод на баланс
+   Пример: <code>/createpromo 500</code>
+
+• <code>/createpromo days &lt;дни&gt;</code> - одноразовый промокод на дни
+   Пример: <code>/createpromo days 7</code>
+
+• <code>/createpromo days &lt;дни&gt; &lt;название&gt;</code> - промокод на дни с названием
+   Пример: <code>/createpromo days 30 Новогодний</code>
+
+• <code>/createpromo days &lt;дни&gt; --reusable</code> - многоразовый промокод на дни
+   Пример: <code>/createpromo days 30 --reusable</code>
+
+• <code>/createpromo days &lt;дни&gt; &lt;название&gt; --reusable</code> - многоразовый с названием
+   Пример: <code>/createpromo days 30 Блогер2024 --reusable</code>
+
+💡 Название промокода: до 100 символов, отображается при активации`, { parse_mode: "HTML" });
   });
 
   // Команда /promos - список активных промокодов
@@ -350,10 +478,16 @@ function initAdminNotifier(bot) {
     }
     
     try {
+      // Получаем активные промокоды (неиспользованные одноразовые + многоразовые)
       const promos = await prisma.adminPromo.findMany({
-        where: { usedById: null },
+        where: {
+          OR: [
+            { usedById: null, isReusable: false }, // Одноразовые неиспользованные
+            { isReusable: true } // Все многоразовые
+          ]
+        },
         orderBy: { createdAt: "desc" },
-        take: 20,
+        take: 30,
       });
       
       if (promos.length === 0) {
@@ -363,10 +497,20 @@ function initAdminNotifier(bot) {
       let msg = "🎁 <b>Активные промокоды:</b>\n\n";
       
       for (const p of promos) {
-        msg += `<code>${p.code}</code> — ${ruMoney(p.amount)}\n`;
+        if (p.type === "BALANCE") {
+          const status = p.isReusable ? `🔄 (использований: ${p.useCount})` : (p.usedById ? "❌ использован" : "✅ активен");
+          msg += `<code>${p.code}</code> — 💵 ${ruMoney(p.amount || 0)} ${status}\n`;
+        } else if (p.type === "DAYS") {
+          const status = p.isReusable ? `🔄 многоразовый (использований: ${p.useCount})` : (p.usedById ? "❌ использован" : "✅ активен");
+          const nameText = p.customName ? ` "${p.customName}"` : "";
+          msg += `<code>${p.code}</code>${nameText} — 📅 ${p.days || 0} ${p.days === 1 ? 'день' : p.days && p.days < 5 ? 'дня' : 'дней'} ${status}\n`;
+        }
       }
       
-      msg += `\n📊 Всего: ${promos.length}`;
+      const balancePromos = promos.filter(p => p.type === "BALANCE" && (!p.isReusable ? !p.usedById : true)).length;
+      const daysPromos = promos.filter(p => p.type === "DAYS" && (!p.isReusable ? !p.usedById : true)).length;
+      
+      msg += `\n📊 Всего: ${promos.length} (💵 на баланс: ${balancePromos}, 📅 на дни: ${daysPromos})`;
       
       await ctx.reply(msg, { parse_mode: "HTML" });
     } catch (err) {

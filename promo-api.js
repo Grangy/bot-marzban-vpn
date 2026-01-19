@@ -2,6 +2,7 @@
 const { prisma } = require("./db");
 const { ruMoney } = require("./menus");
 const { ADMIN_BROADCAST_SECRET } = require("./broadcast-api");
+const { activatePromoCode, detectPromoType, PROMO_TYPES } = require("./promo-manager");
 
 /**
  * Middleware для проверки админ-доступа
@@ -64,53 +65,53 @@ function registerPromoAPI(app) {
         });
       }
 
-      // Проверяем, админский ли это промокод (GIFT...)
-      if (upperCode.startsWith("GIFT")) {
-        const result = await activateAdminPromoAPI(user.id, upperCode);
-        
-        if (!result.ok) {
-          return res.status(400).json({
-            ok: false,
-            error: result.error,
-            message: result.message
-          });
-        }
-
-        // Получаем обновленный баланс
-        const updatedUser = await prisma.user.findUnique({
-          where: { id: user.id },
-          select: { balance: true }
-        });
-
-        return res.json({
-          ok: true,
-          data: {
-            type: "admin",
-            amount: result.amount,
-            balance: updatedUser.balance,
-            message: `🎉 Промокод активирован! Начислено: ${ruMoney(result.amount)}. Ваш баланс: ${ruMoney(updatedUser.balance)}`
-          }
-        });
-      }
-
-      // Клиентский промокод
-      const result = await activateClientPromoAPI(user.id, upperCode);
+      // Автоматически определяем тип промокода и активируем через новый модуль
+      const result = await activatePromoCode(user.id, upperCode);
 
       if (!result.ok) {
         return res.status(400).json({
           ok: false,
-          error: result.error,
+          error: "ACTIVATION_FAILED",
           message: result.message
         });
       }
 
+      // Формируем ответ в зависимости от типа промокода
+      const responseData = {
+        type: result.type,
+        message: result.message
+      };
+
+      // Для промокодов на баланс добавляем информацию о балансе
+      if (result.type === PROMO_TYPES.ADMIN_BALANCE && result.data?.amount) {
+        const updatedUser = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { balance: true }
+        });
+        responseData.amount = result.data.amount;
+        responseData.balance = updatedUser.balance;
+      }
+
+      // Для промокодов на дни добавляем информацию о подписке
+      if (result.type === PROMO_TYPES.ADMIN_DAYS || result.type === PROMO_TYPES.REFERRAL) {
+        if (result.data?.subscriptionId) {
+          const subscription = await prisma.subscription.findUnique({
+            where: { id: result.data.subscriptionId },
+            select: { subscriptionUrl: true, subscriptionUrl2: true, endDate: true }
+          });
+          responseData.subscription = {
+            id: result.data.subscriptionId,
+            subscriptionUrl: subscription?.subscriptionUrl,
+            subscriptionUrl2: subscription?.subscriptionUrl2,
+            endDate: subscription?.endDate,
+            days: result.data.days
+          };
+        }
+      }
+
       return res.json({
         ok: true,
-        data: {
-          type: "client",
-          amount: result.amount || 0,
-          message: result.message
-        }
+        data: responseData
       });
     } catch (error) {
       console.error("[PROMO API] Activate error:", error);
@@ -223,23 +224,27 @@ function registerPromoAPI(app) {
     try {
       const { limit = 50, offset = 0 } = req.query;
 
+      // Получаем активные промокоды (неиспользованные одноразовые + многоразовые)
       const promos = await prisma.adminPromo.findMany({
         where: {
-          usedById: null // Только неиспользованные
+          OR: [
+            { usedById: null, isReusable: false }, // Одноразовые неиспользованные
+            { isReusable: true } // Все многоразовые
+          ]
         },
         orderBy: {
           createdAt: "desc"
         },
         take: Number(limit),
-        skip: Number(offset),
-        include: {
-          // Информация о создателе (если есть)
-        }
+        skip: Number(offset)
       });
 
       const total = await prisma.adminPromo.count({
         where: {
-          usedById: null
+          OR: [
+            { usedById: null, isReusable: false },
+            { isReusable: true }
+          ]
         }
       });
 
@@ -249,10 +254,15 @@ function registerPromoAPI(app) {
           promos: promos.map(p => ({
             id: p.id,
             code: p.code,
+            type: p.type,
             amount: p.amount,
+            days: p.days,
+            isReusable: p.isReusable,
+            customName: p.customName,
+            useCount: p.useCount,
             createdAt: p.createdAt,
             createdBy: p.createdBy,
-            isUsed: false
+            isUsed: !p.isReusable && !!p.usedById
           })),
           total,
           limit: Number(limit),
@@ -364,10 +374,13 @@ function registerPromoAPI(app) {
     try {
       const { adminLimit = 20, clientLimit = 20 } = req.query;
 
-      // Админские промокоды
+      // Админские промокоды (активные)
       const adminPromos = await prisma.adminPromo.findMany({
         where: {
-          usedById: null
+          OR: [
+            { usedById: null, isReusable: false },
+            { isReusable: true }
+          ]
         },
         orderBy: {
           createdAt: "desc"
@@ -408,10 +421,15 @@ function registerPromoAPI(app) {
           admin: {
             promos: adminPromos.map(p => ({
               code: p.code,
+              type: p.type,
               amount: p.amount,
+              days: p.days,
+              isReusable: p.isReusable,
+              customName: p.customName,
+              useCount: p.useCount,
               createdAt: p.createdAt,
               createdBy: p.createdBy,
-              type: "admin"
+              promoType: "admin"
             })),
             total: adminPromos.length
           },
@@ -441,151 +459,6 @@ function registerPromoAPI(app) {
   console.log("🎁 Promo API endpoints registered");
 }
 
-// ==========================================
-// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-// ==========================================
-
-/**
- * Активация админского промокода
- */
-async function activateAdminPromoAPI(userId, code) {
-  try {
-    const result = await prisma.$transaction(async (tx) => {
-      const promo = await tx.adminPromo.findUnique({
-        where: { code }
-      });
-
-      if (!promo) {
-        return { ok: false, error: "NOT_FOUND", message: "Промокод не найден" };
-      }
-
-      if (promo.usedById) {
-        return { ok: false, error: "ALREADY_USED", message: "Промокод уже использован" };
-      }
-
-      await tx.adminPromo.update({
-        where: { id: promo.id },
-        data: {
-          usedById: userId,
-          usedAt: new Date()
-        }
-      });
-
-      await tx.user.update({
-        where: { id: userId },
-        data: {
-          balance: { increment: promo.amount }
-        }
-      });
-
-      return { ok: true, amount: promo.amount };
-    });
-
-    return result;
-  } catch (error) {
-    console.error("[PROMO API] Admin promo activation error:", error);
-    return { ok: false, error: "SERVER_ERROR", message: error.message };
-  }
-}
-
-/**
- * Активация клиентского промокода
- */
-async function activateClientPromoAPI(userId, code) {
-  try {
-    const result = await prisma.$transaction(async (tx) => {
-      const me = await tx.user.findUnique({ where: { id: userId } });
-      if (!me) {
-        return { ok: false, error: "USER_NOT_FOUND", message: "Пользователь не найден" };
-      }
-
-      const owner = await tx.user.findUnique({
-        where: { promoCode: code }
-      });
-
-      if (!owner) {
-        return { ok: false, error: "NOT_FOUND", message: "Промокод не найден" };
-      }
-
-      if (owner.id === me.id) {
-        return { ok: false, error: "SELF_ACTIVATION", message: "Нельзя активировать свой промокод" };
-      }
-
-      const already = await tx.promoActivation.findUnique({
-        where: { activatorId: me.id }
-      });
-
-      if (already) {
-        return { ok: false, error: "ALREADY_ACTIVATED", message: "Вы уже активировали промокод ранее" };
-      }
-
-      // Создаем активацию
-      await tx.promoActivation.create({
-        data: {
-          codeOwnerId: owner.id,
-          activatorId: me.id,
-          amount: 100 // Стандартный бонус для клиентского промокода
-        }
-      });
-
-      // Возвращаем успех - создание подписки вынесем за транзакцию
-      return {
-        ok: true,
-        userId: me.id,
-        telegramId: me.telegramId
-      };
-    });
-
-    // Создаем промо-подписку на 10 дней (вне транзакции)
-    if (result.ok) {
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 10);
-
-      const { createMarzbanUserOnBothServers } = require("./marzban-utils");
-      const crypto = require("crypto");
-      const username = `${result.telegramId}_PROMO_10D_${Date.now()}`;
-      const expire = Math.floor(endDate.getTime() / 1000);
-
-      const userData = {
-        username,
-        status: "active",
-        expire,
-        proxies: {
-          vless: {
-            id: crypto.randomUUID(),
-            flow: "xtls-rprx-vision"
-          }
-        },
-        inbounds: { vless: ["VLESS TCP REALITY", "VLESS-TCP-REALITY-VISION"] },
-        note: `Promo user ${result.telegramId}`,
-        data_limit: 0,
-        data_limit_reset_strategy: "no_reset"
-      };
-
-      const { url1, url2 } = await createMarzbanUserOnBothServers(userData);
-
-      await prisma.subscription.create({
-        data: {
-          userId: result.userId,
-          type: "PROMO_10D",
-          startDate: new Date(),
-          endDate,
-          subscriptionUrl: url1,
-          subscriptionUrl2: url2
-        }
-      });
-
-      return {
-        ok: true,
-        message: "🎉 Промокод активирован! Вам начислена бесплатная подписка на 10 дней."
-      };
-    }
-
-    return result;
-  } catch (error) {
-    console.error("[PROMO API] Client promo activation error:", error);
-    return { ok: false, error: "SERVER_ERROR", message: error.message };
-  }
-}
+// Старые функции удалены - теперь используется promo-manager.js
 
 module.exports = { registerPromoAPI };

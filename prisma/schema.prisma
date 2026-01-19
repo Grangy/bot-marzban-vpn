@@ -29,6 +29,7 @@ model User {
   promoCode   String?       @unique
   promoActivationsAsOwner   PromoActivation[] @relation("OwnerActivations")
   promoActivationAsUser     PromoActivation?  @relation("UserActivation")
+  adminPromoActivations AdminPromoActivation[] // активации админских промокодов
 
   subscriptions Subscription[]
   topUps         TopUp[]
@@ -87,17 +88,40 @@ model TopUp {
   @@index([userId, createdAt])
 }
 
-// Админские промокоды на баланс
+// Админские промокоды (на баланс или на дни)
 model AdminPromo {
   id         Int      @id @default(autoincrement())
   code       String   @unique              // уникальный код промокода
-  amount     Int                           // номинал в рублях
-  usedById   Int?                          // кто использовал (null = не использован)
-  usedAt     DateTime?                     // когда использован
+  type       String   @default("BALANCE")  // BALANCE - на баланс, DAYS - на дни подписки
+  amount     Int?                          // номинал в рублях (для type=BALANCE)
+  days       Int?                          // количество дней (для type=DAYS)
+  isReusable Boolean  @default(false)      // многоразовый промокод (для блогеров)
+  customName String?                       // кастомное название промокода (для отображения)
+  usedById   Int?                          // кто использовал (null = не использован, для одноразовых)
+  usedAt     DateTime?                     // когда использован (для одноразовых)
+  useCount   Int      @default(0)          // количество использований (для многоразовых)
   createdAt  DateTime @default(now())
   createdBy  String?                       // кто создал (telegram id админа)
   
+  activations AdminPromoActivation[]      // активации многоразовых промокодов
+  
   @@index([code])
+  @@index([type, createdAt])
+}
+
+// Отслеживание активаций админских промокодов (каждый пользователь может активировать промокод только 1 раз)
+model AdminPromoActivation {
+  id         Int      @id @default(autoincrement())
+  promoId    Int                           // ID промокода
+  userId     Int                           // ID пользователя, который активировал
+  activatedAt DateTime @default(now())       // когда активировал
+  
+  promo      AdminPromo @relation(fields: [promoId], references: [id])
+  user       User       @relation(fields: [userId], references: [id])
+  
+  @@unique([promoId, userId])              // один пользователь может активировать промокод только один раз
+  @@index([promoId])
+  @@index([userId])
 }
 
 

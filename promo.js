@@ -1,226 +1,47 @@
-// promo.js
+// promo.js - Telegram Bot интерфейс для работы с промокодами
+// Использует promo-manager.js для логики активации
 const { prisma } = require("./db");
 const { Markup } = require("telegraf");
-const { ruMoney, promoMenu, PLANS } = require("./menus");
-const { SubscriptionType } = require("@prisma/client");
-const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
-
-const MARZBAN_API_URL = process.env.MARZBAN_API_URL;
-const { createMarzbanUserOnBothServers } = require("./marzban-utils");
+const { promoMenu } = require("./menus");
+const { activatePromoCode, getUserPromoStats } = require("./promo-manager");
 
 // Хранилище пользователей, ожидающих ввода промокода (chatId -> true)
 const waitingForPromoCode = new Set();
 
-// Функция для активации админского промокода на баланс
-async function activateAdminPromo(ctx, code) {
+// Функция для активации промокода (обертка для Telegram контекста)
+async function activatePromoCodeForUser(ctx, inputCode) {
   try {
     // Проверяем, что пользователь инициализирован
     if (!ctx.dbUser || !ctx.dbUser.id) {
-      console.error("[PROMO] ctx.dbUser is undefined in activateAdminPromo");
+      console.error("[PROMO] ctx.dbUser is undefined");
       return { ok: false, message: "❌ Ошибка инициализации. Попробуйте еще раз." };
     }
     
-    const result = await prisma.$transaction(async (tx) => {
-      // Ищем промокод
-      const promo = await tx.adminPromo.findUnique({
-        where: { code },
-      });
-      
-      if (!promo) {
-        return { ok: false, reason: "NOT_FOUND" };
-      }
-      
-      if (promo.usedById) {
-        return { ok: false, reason: "ALREADY_USED" };
-      }
-      
-      // Помечаем промокод как использованный
-      await tx.adminPromo.update({
-        where: { id: promo.id },
-        data: {
-          usedById: ctx.dbUser.id,
-          usedAt: new Date(),
-        },
-      });
-      
-      // Начисляем баланс пользователю
-      await tx.user.update({
-        where: { id: ctx.dbUser.id },
-        data: {
-          balance: { increment: promo.amount },
-        },
-      });
-      
-      return { ok: true, amount: promo.amount };
-    });
+    // Используем новый модуль для активации
+    const result = await activatePromoCode(ctx.dbUser.id, inputCode);
     
-    if (!result.ok) {
-      if (result.reason === "NOT_FOUND") {
-        return { ok: false, message: "❌ Такой промокод не найден." };
-      }
-      if (result.reason === "ALREADY_USED") {
-        return { ok: false, message: "❌ Этот промокод уже был использован." };
-      }
-      return { ok: false, message: "❌ Не удалось активировать промокод." };
-    }
-    
-    // Получаем обновленный баланс
-    const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
-    
-    return {
-      ok: true,
-      message: `🎉 Промокод активирован!\n\n💵 Начислено: ${ruMoney(result.amount)}\n💳 Ваш баланс: ${ruMoney(user.balance)}\n\nТеперь вы можете купить подписку в разделе "🛒 Купить подписку"`,
-    };
-  } catch (e) {
-    console.error("[PROMO] Admin promo error:", e);
-    return { ok: false, message: "Ошибка при активации промокода. Попробуйте позже." };
-  }
-}
-
-// Функция для активации промокода (вынесена для переиспользования)
-async function activatePromoCode(ctx, inputCode) {
-  try {
-    // Проверяем, что пользователь инициализирован
-    if (!ctx.dbUser || !ctx.dbUser.id) {
-      console.error("[PROMO] ctx.dbUser is undefined in activatePromoCode");
-      return { ok: false, message: "❌ Ошибка инициализации. Попробуйте еще раз." };
-    }
-    
-    const upperCode = inputCode.toUpperCase();
-    
-    // Сначала проверяем, не админский ли это промокод (GIFT...)
-    if (upperCode.startsWith("GIFT")) {
-      return await activateAdminPromo(ctx, upperCode);
-    }
-    
-    const result = await prisma.$transaction(async (tx) => {
-      const me = await tx.user.findUnique({ where: { id: ctx.dbUser.id } });
-
-      // код должен существовать
-      const owner = await tx.user.findUnique({
-        where: { promoCode: upperCode },
-      });
-      if (!owner) return { ok: false, reason: "NOT_FOUND" };
-
-      // нельзя активировать свой
-      if (owner.id === me.id) return { ok: false, reason: "SELF" };
-
-      // уже активировал раньше любой код?
-      const already = await tx.promoActivation.findUnique({
-        where: { activatorId: me.id },
-      });
-      if (already) return { ok: false, reason: "ALREADY" };
-
-      // создаём запись активации
-      await tx.promoActivation.create({
-        data: {
-          codeOwnerId: owner.id,
-          activatorId: me.id,
-          amount: 0, // больше не начисляем деньги
-        },
-      });
-
-      // создаём подписку на 3 дня
-      const endDate = new Date();
-      endDate.setDate(endDate.getDate() + 3);
-      
-      const sub = await tx.subscription.create({
-        data: {
-          userId: me.id,
-          type: SubscriptionType.PROMO_10D,
-          startDate: new Date(),
-          endDate: endDate,
-        },
-      });
-
-      return { ok: true, owner, sub };
-    });
-
-    if (!result.ok) {
-      if (result.reason === "NOT_FOUND")
-        return { ok: false, message: "❌ Такой промокод не найден." };
-      if (result.reason === "SELF")
-        return { ok: false, message: "❌ Нельзя активировать свой промокод." };
-      if (result.reason === "ALREADY")
-        return { ok: false, message: "❌ Вы уже активировали промокод ранее." };
-      return { ok: false, message: "❌ Не удалось активировать промокод." };
-    }
-
-    // создаём VPN пользователя в Marzban на обоих серверах и получаем ссылки
-    const username = `${ctx.dbUser.telegramId}_PROMO_${result.sub.id}`;
-    const expireSeconds = 3 * 24 * 60 * 60; // 3 дня в секундах
-    const expire = Math.floor(Date.now() / 1000) + expireSeconds;
-    
-    const userData = {
-      username,
-      status: "active",
-      expire,
-      proxies: {
-        vless: {
-          id: require("crypto").randomUUID(),
-          flow: "xtls-rprx-vision"
+    // Если это реферальный промокод, оповещаем владельца
+    if (result.ok && result.type === "referral") {
+      try {
+        const owner = await prisma.user.findFirst({
+          where: { promoCode: inputCode.toUpperCase() }
+        });
+        
+        if (owner && owner.chatId) {
+          await ctx.telegram.sendMessage(
+            owner.chatId,
+            `🎉 Ваш промокод активирован пользователем ${ctx.dbUser.accountName || ctx.dbUser.telegramId}`
+          );
         }
-      },
-      inbounds: { vless: ["VLESS TCP REALITY", "VLESS-TCP-REALITY-VISION"] },
-      note: `Telegram user ${ctx.dbUser.accountName || ctx.dbUser.telegramId}`,
-      data_limit: 0,
-      data_limit_reset_strategy: "no_reset"
-    };
-    
-    const { url1: subscriptionUrl, url2: subscriptionUrl2 } = await createMarzbanUserOnBothServers(userData);
-    
-    // обновляем подписку с полученными ссылками
-    await prisma.subscription.update({
-      where: { id: result.sub.id },
-      data: { 
-        subscriptionUrl,
-        subscriptionUrl2
+      } catch (e) {
+        // Молча игнорируем ошибки отправки уведомления
       }
-    });
-
-    // оповестим владельца кода (если возможен DM)
-    try {
-      const owner = result.owner;
-      if (owner.chatId) {
-        await ctx.telegram.sendMessage(
-          owner.chatId,
-          `🎉 Ваш промокод активирован пользователем ${ctx.dbUser.accountName || ctx.dbUser.telegramId}`
-        );
-      }
-    } catch (e) {
-      // молча игнорируем
-    }
-
-    // Получаем обе ссылки из БД
-    const updatedSub = await prisma.subscription.findUnique({ where: { id: result.sub.id } });
-    
-    // показываем успешную активацию с ссылкой на VPN
-    let successMessage = `✅ Промокод применён! Вы получили VPN на 3 дня с обходом блокировок мобильной связи.`;
-    
-    if (updatedSub.subscriptionUrl) {
-      successMessage += `\n\n🔗 Ссылка на подписку: ${updatedSub.subscriptionUrl}`;
-    }
-    if (updatedSub.subscriptionUrl2) {
-      successMessage += `\n\n🔗 Ссылка для операторов Миранда: ${updatedSub.subscriptionUrl2}`;
     }
     
-    successMessage += `
-
-📱 Как использовать:
-1. Скопируйте ссылку выше
-2. Откройте приложение Happ на вашем устройстве
-3. Нажмите "+" → "Import from URL"
-4. Вставьте ссылку и нажмите "Import"
-5. Включите VPN кнопкой "Connect"
-
-🔓 Теперь вы можете использовать VPN даже там, где оператор блокирует VPN-сервисы!
-
-💡 Если нужна помощь, смотрите инструкции в разделе "📖 Инструкции"`;
-
-    return { ok: true, message: successMessage };
+    return result;
   } catch (e) {
-    console.error("[PROMO] error:", e);
-    return { ok: false, message: "Ошибка при активации промокода. Попробуйте позже." };
+    console.error("[PROMO] Activation error:", e);
+    return { ok: false, message: "❌ Ошибка при активации промокода. Попробуйте позже." };
   }
 }
 
@@ -252,12 +73,8 @@ function registerPromo(bot) {
     const chatId = String(ctx.chat?.id || ctx.from?.id);
     waitingForPromoCode.delete(chatId);
     
-    const me = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
-
-    // Получаем статистику активаций
-    const activations = await prisma.promoActivation.count({
-      where: { codeOwnerId: me.id },
-    });
+    // Получаем статистику промокода через новый модуль
+    const stats = await getUserPromoStats(ctx.dbUser.id);
 
     // Получаем username бота
     let botUsername = null;
@@ -275,7 +92,7 @@ function registerPromo(bot) {
 `🎁 Ваш промокод: \`${me.promoCode}\`
 
 📊 Статистика:
-✅ Активаций: ${activations}
+✅ Активаций: ${stats.activations}
 
 🎯 Подарок: любой пользователь, который активирует ваш код, получит VPN на 3 дня с обходом блокировок мобильной связи. 
 
@@ -378,7 +195,7 @@ function registerPromo(bot) {
     const inputCode = promoMatch[1].toUpperCase();
 
     // Пытаемся активировать промокод
-    const result = await activatePromoCode(ctx, inputCode);
+    const result = await activatePromoCodeForUser(ctx, inputCode);
 
     if (result.ok) {
       await ctx.reply(result.message);
@@ -410,7 +227,7 @@ function registerPromo(bot) {
     }
 
     const inputCode = match[1].toUpperCase();
-    const result = await activatePromoCode(ctx, inputCode);
+    const result = await activatePromoCodeForUser(ctx, inputCode);
 
     if (result.ok) {
       return ctx.reply(result.message);
