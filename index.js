@@ -32,16 +32,16 @@ const PORT = process.env.PAYMENT_PORT || 4000;
     // Подключаем админ-нотификатор (уведомления в группу)
     initAdminNotifier(bot);
 
+    // Инициализируем модуль рассылок СРАЗУ (бот уже создан, просто еще не запущен)
+    initBroadcast(bot);
+    console.log("✅ Broadcast module initialized");
+
     // Бот — асинхронно с таймаутом
     console.log("🤖 Launching Telegram bot...");
 (async () => {
   try {
     await bot.launch({ dropPendingUpdates: true });
     console.log("✅ Bot started and polling updates");
-    
-    // Инициализируем модуль рассылок
-    initBroadcast(bot);
-    console.log("✅ Broadcast module initialized");
   } catch (err) {
     console.error("❌ Bot launch failed:", err.message);
   }
