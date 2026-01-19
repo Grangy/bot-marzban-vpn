@@ -102,6 +102,9 @@ function promoMenu() {
 function mainMenu(balanceRub = 0) {
   return Markup.inlineKeyboard([
     [
+      Markup.button.webApp("📱 Открыть приложение", "https://web.grangy.ru/")
+    ],
+    [
       Markup.button.callback("📦 Мои подписки", "my_subs"),
       Markup.button.callback("💳 Купить подписку", "buy")
     ],
