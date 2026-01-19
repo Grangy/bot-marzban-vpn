@@ -39,6 +39,11 @@ echo ""
 # 3. Проверка данных через Prisma напрямую
 echo "📊 Проверка данных через Node.js (как видит бот):"
 cat > /tmp/check-prisma-data.js << 'EOF'
+const path = require('path');
+// Переходим в директорию проекта
+const projectDir = process.argv[2] || process.cwd();
+process.chdir(projectDir);
+
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
@@ -69,7 +74,7 @@ const prisma = new PrismaClient();
 })();
 EOF
 
-node /tmp/check-prisma-data.js
+node /tmp/check-prisma-data.js "$PROJECT_DIR"
 rm -f /tmp/check-prisma-data.js
 echo ""
 
