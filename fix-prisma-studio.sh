@@ -146,18 +146,82 @@ node /tmp/test-prisma-data.js "$PROJECT_DIR"
 rm -f /tmp/test-prisma-data.js
 echo ""
 
-# 7. Инструкции
+# 7. Тестирование альтернативных путей
+echo "🧪 Тестирование альтернативных форматов путей..."
+ABSOLUTE_DB_PATH=$(realpath "$FOUND_DB" 2>/dev/null || echo "$PROJECT_DIR/$FOUND_DB")
+ABSOLUTE_DB_URL="file:$ABSOLUTE_DB_PATH"
+
+echo "   Абсолютный путь: $ABSOLUTE_DB_URL"
+echo ""
+
+# Тестируем абсолютный путь
+echo "   Тестирую абсолютный путь..."
+cp .env .env.backup.test2
+sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"$ABSOLUTE_DB_URL\"|" .env
+
+cat > /tmp/test-absolute-path.js << 'EOF'
+const path = require('path');
+const projectDir = process.argv[2];
+process.chdir(projectDir);
+
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+
+(async () => {
+  try {
+    const userCount = await prisma.user.count();
+    console.log(`      ✅ Абсолютный путь работает! Пользователей: ${userCount}`);
+    await prisma.$disconnect();
+    process.exit(0);
+  } catch (err) {
+    console.log(`      ❌ Ошибка: ${err.message.split('\n')[0]}`);
+    await prisma.$disconnect();
+    process.exit(1);
+  }
+})();
+EOF
+
+if node /tmp/test-absolute-path.js "$PROJECT_DIR" 2>/dev/null; then
+    echo "   ✅ Абсолютный путь работает!"
+    echo ""
+    echo "💡 Рекомендация: Используйте абсолютный путь для Prisma Studio"
+    echo ""
+    read -p "   Обновить .env на абсолютный путь? (y/n): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"$ABSOLUTE_DB_URL\"|" .env
+        echo "   ✅ .env обновлен на абсолютный путь!"
+        echo ""
+        echo "🔄 Регенерируем Prisma Client..."
+        npx prisma generate
+        echo ""
+        echo "✅ Готово! Теперь попробуйте: npx prisma studio"
+    else
+        mv .env.backup.test2 .env
+        echo "   ⏭️  Оставлен текущий путь"
+    fi
+else
+    mv .env.backup.test2 .env
+    echo "   ⚠️  Абсолютный путь тоже не сработал"
+fi
+
+rm -f /tmp/test-absolute-path.js
+echo ""
+
+# 8. Инструкции
 echo "💡 Инструкции для запуска Prisma Studio:"
 echo ""
 echo "   1. Убедитесь, что .env указывает на правильный путь:"
 echo "      grep DATABASE_URL .env"
 echo ""
-echo "   2. Запустите Prisma Studio:"
+echo "   2. Запустите Prisma Studio из корня проекта:"
+echo "      cd $PROJECT_DIR"
 echo "      npx prisma studio"
 echo ""
-echo "   3. Если данные все еще пустые, проверьте:"
-echo "      - Что Prisma Studio запущен из правильной директории"
-echo "      - Что в браузере открыт правильный порт (обычно http://localhost:5555)"
+echo "   3. Если данные все еще пустые:"
+echo "      - Попробуйте использовать абсолютный путь (см. выше)"
+echo "      - Убедитесь, что Prisma Studio запущен из правильной директории"
+echo "      - Проверьте, что в браузере открыт правильный порт (http://localhost:5555)"
 echo "      - Попробуйте перезапустить: Ctrl+C и снова npx prisma studio"
 echo ""
 echo "   4. Альтернатива - проверьте данные напрямую через sqlite3:"
