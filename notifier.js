@@ -42,19 +42,42 @@ bus.on("topup.timeout", async ({ topupId }) => {
     const user = await prisma.user.findUnique({ where: { id: topup.userId } });
     if (!user?.chatId) return;
 
-    const text =
-      `⏳ Счёт на ${ruMoney(topup.amount)} истёк (не оплачен в течение 30 минут).\n\n` +
-      `💡 Создайте новый запрос на пополнение или обратитесь в поддержку: @supmaxgroot`;
+    const username = user?.accountName || "";
+    const greeting = username ? `Привет, ${username}! 👋` : `Привет! 👋`;
 
-    await bot.telegram.sendMessage(user.chatId, text);
-    console.log(`[NOTIFY] Timeout sent to chatId=${user.chatId} for topup=${topupId}`);
+    const text = `${greeting}
+
+Видел, что ты интересовался подпиской на MaxGroot, но в итоге не оформил.
+Всё ли в порядке? 🤔
+
+Возникли технические сложности при оплате? 💳❌  
+Не подошли тарифы или условия? 💰📉  
+Нужна помощь с выбором или инструкцией? 📖🆘
+
+Напиши, в чём дело — помогу разобраться за 2 минуты! ⚡
+
+Напоминаю: 20.01.2026 в 23:59 все тарифы вырастут на 50%! ⏰💸  
+Успей оформить по старой цене! 🚀
+
+@maxvpn_offbot
+
+Жду ответа! 😊`;
+
+    const keyboard = Markup.inlineKeyboard([
+      [Markup.button.callback("💳 Пополнить баланс", "balance_topup")],
+      [Markup.button.callback("🛒 Купить подписку", "buy")],
+      [Markup.button.callback("📖 Инструкции", "instructions")]
+    ]);
+
+    await bot.telegram.sendMessage(user.chatId, text, keyboard);
+    console.log(`[NOTIFY] Timeout reminder sent to chatId=${user.chatId} for topup=${topupId}`);
   } catch (e) {
     console.error("[NOTIFY] Error sending timeout:", e);
   }
 });
 
 
-  // Неуспешная оплата (опционально — полезно иметь)
+  // Неуспешная оплата
   bus.on("topup.failed", async ({ topupId }) => {
     try {
       const topup = await prisma.topUp.findUnique({ where: { id: topupId } });
@@ -63,17 +86,35 @@ bus.on("topup.timeout", async ({ topupId }) => {
       const user = await prisma.user.findUnique({ where: { id: topup.userId } });
       if (!user?.chatId) return;
 
-      const text =
-        `❌ Оплата отменена или не завершена.\n` +
-        `Сумма: ${ruMoney(topup.amount)}\n\n` +
-        `💡 Возможные причины:\n` +
-        `• Не завершили оплату в приложении банка\n` +
-        `• Отменили операцию\n` +
-        `• Истекло время ожидания\n\n` +
-        `🔄 Попробуйте создать новый счёт или обратитесь в поддержку: @supmaxgroot`;
+      const username = user?.accountName || "";
+      const greeting = username ? `Привет, ${username}! 👋` : `Привет! 👋`;
 
-      await bot.telegram.sendMessage(user.chatId, text);
-      console.log(`[NOTIFY] Fail sent to chatId=${user.chatId} for topup=${topupId}`);
+      const text = `${greeting}
+
+Видел, что ты интересовался подпиской на MaxGroot, но в итоге не оформил.
+Всё ли в порядке? 🤔
+
+Возникли технические сложности при оплате? 💳❌  
+Не подошли тарифы или условия? 💰📉  
+Нужна помощь с выбором или инструкцией? 📖🆘
+
+Напиши, в чём дело — помогу разобраться за 2 минуты! ⚡
+
+Напоминаю: 20.01.2026 в 23:59 все тарифы вырастут на 50%! ⏰💸  
+Успей оформить по старой цене! 🚀
+
+@maxvpn_offbot
+
+Жду ответа! 😊`;
+
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback("💳 Пополнить баланс", "balance_topup")],
+        [Markup.button.callback("🛒 Купить подписку", "buy")],
+        [Markup.button.callback("📖 Инструкции", "instructions")]
+      ]);
+
+      await bot.telegram.sendMessage(user.chatId, text, keyboard);
+      console.log(`[NOTIFY] Failed reminder sent to chatId=${user.chatId} for topup=${topupId}`);
     } catch (e) {
       console.error("[NOTIFY] Error sending fail:", e);
     }
