@@ -319,10 +319,195 @@
             background: rgba(255, 255, 255, 0.3);
             border-color: rgba(255, 255, 255, 0.5);
         }
+
+        /* Модальное окно для ввода ключа */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(30px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal {
+            background: white;
+            border-radius: 16px;
+            padding: 0;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: slideUp 0.3s ease;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px 30px;
+            text-align: center;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .modal-header p {
+            margin: 8px 0 0 0;
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .modal-body {
+            padding: 30px;
+        }
+
+        .modal-body label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .modal-body input {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 15px;
+            font-family: 'Courier New', monospace;
+            transition: border-color 0.3s;
+            box-sizing: border-box;
+        }
+
+        .modal-body input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .modal-body .help-text {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .modal-footer {
+            padding: 20px 30px;
+            background: #f8f9fa;
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .modal-footer button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .modal-btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .modal-btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .modal-btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .modal-btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .modal-btn-secondary:hover {
+            background: #d0d0d0;
+        }
+
+        .error-message {
+            margin-top: 10px;
+            padding: 10px;
+            background: #fee;
+            border: 1px solid #fcc;
+            border-radius: 6px;
+            color: #c33;
+            font-size: 13px;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
+    <!-- Модальное окно для ввода ключа -->
+    <div class="modal-overlay" id="keyModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>🔐 Авторизация</h2>
+                <p>Введите секретный ключ для доступа к панели рассылок</p>
+            </div>
+            <div class="modal-body">
+                <label for="keyInput">Секретный ключ *</label>
+                <input 
+                    type="password" 
+                    id="keyInput" 
+                    placeholder="Введите секретный ключ"
+                    autocomplete="off"
+                    autofocus
+                    onkeypress="if(event.key === 'Enter') document.getElementById('submitKeyBtn').click()"
+                >
+                <div class="help-text">Ключ будет сохранен в браузере для последующих посещений</div>
+                <div class="error-message" id="keyError"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="modal-btn-secondary" onclick="closeKeyModal()">Отмена</button>
+                <button type="button" class="modal-btn-primary" id="submitKeyBtn" onclick="submitKey()">Войти</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container" id="mainContainer" style="display: none;">
         <div class="header">
             <h1>📢 Панель рассылок MaxGroot</h1>
             <p>Управление рассылкой сообщений пользователям бота</p>
@@ -417,37 +602,111 @@
     <script>
         const API_URL = window.location.origin;
         const STORAGE_KEY = 'maxgroot_broadcast_admin_secret';
+        let ADMIN_SECRET = null;
 
-        // Получаем или запрашиваем секретный ключ
-        function getAdminSecret() {
-            // Проверяем localStorage
-            let secret = localStorage.getItem(STORAGE_KEY);
+        // Показываем модальное окно для ввода ключа
+        function showKeyModal() {
+            const modal = document.getElementById('keyModal');
+            const keyInput = document.getElementById('keyInput');
+            const errorMsg = document.getElementById('keyError');
+            
+            modal.classList.add('active');
+            keyInput.value = '';
+            errorMsg.classList.remove('show');
+            errorMsg.textContent = '';
+            
+            // Фокус на поле ввода
+            setTimeout(() => keyInput.focus(), 100);
+        }
+
+        // Скрываем модальное окно
+        function closeKeyModal() {
+            const modal = document.getElementById('keyModal');
+            modal.classList.remove('active');
+            
+            // Если ключ не введен, скрываем основное содержимое
+            if (!ADMIN_SECRET) {
+                document.getElementById('mainContainer').style.display = 'none';
+            }
+        }
+
+        // Отправка ключа
+        function submitKey() {
+            const keyInput = document.getElementById('keyInput');
+            const errorMsg = document.getElementById('keyError');
+            const submitBtn = document.getElementById('submitKeyBtn');
+            
+            const secret = keyInput.value.trim();
             
             if (!secret) {
-                // Запрашиваем ключ
-                secret = prompt('Введите секретный ключ админа:') || '';
-                
-                if (secret) {
-                    // Сохраняем в localStorage
-                    localStorage.setItem(STORAGE_KEY, secret);
-                } else {
-                    alert('Секретный ключ обязателен!');
-                    window.location.reload();
-                    return null;
+                errorMsg.textContent = '⚠️ Секретный ключ обязателен!';
+                errorMsg.classList.add('show');
+                keyInput.focus();
+                return;
+            }
+
+            // Сохраняем ключ
+            ADMIN_SECRET = secret;
+            localStorage.setItem(STORAGE_KEY, secret);
+            
+            // Скрываем модальное окно
+            closeKeyModal();
+            
+            // Показываем основное содержимое
+            document.getElementById('mainContainer').style.display = 'block';
+            
+            // Загружаем статистику
+            loadStats();
+        }
+
+        // Функция для сброса ключа
+        function resetAdminSecret() {
+            if (confirm('Вы уверены, что хотите сбросить ключ? Потребуется повторный ввод.')) {
+                localStorage.removeItem(STORAGE_KEY);
+                ADMIN_SECRET = null;
+                document.getElementById('mainContainer').style.display = 'none';
+                showKeyModal();
+            }
+        }
+
+        // Закрытие по Escape
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('keyModal');
+                if (modal.classList.contains('active') && ADMIN_SECRET) {
+                    closeKeyModal();
                 }
             }
+        });
+
+        // Закрытие по клику на overlay (но не на сам modal)
+        document.getElementById('keyModal').addEventListener('click', function(e) {
+            if (e.target === this && ADMIN_SECRET) {
+                closeKeyModal();
+            }
+        });
+
+        // Инициализация при загрузке страницы
+        function init() {
+            // Проверяем localStorage
+            const savedSecret = localStorage.getItem(STORAGE_KEY);
             
-            return secret;
+            if (savedSecret) {
+                ADMIN_SECRET = savedSecret;
+                document.getElementById('mainContainer').style.display = 'block';
+                loadStats();
+            } else {
+                // Показываем модальное окно
+                showKeyModal();
+            }
         }
 
-        // Функция для сброса ключа (можно вызвать из консоли: resetAdminSecret())
-        function resetAdminSecret() {
-            localStorage.removeItem(STORAGE_KEY);
-            alert('Ключ удален. Страница будет перезагружена.');
-            window.location.reload();
+        // Запускаем инициализацию после загрузки DOM
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init);
+        } else {
+            init();
         }
-
-        const ADMIN_SECRET = getAdminSecret();
 
         // Загрузка статистики
         async function loadStats() {
@@ -473,11 +732,16 @@
                 }
             } catch (error) {
                 console.error('Ошибка загрузки статистики:', error);
-                // Если ошибка авторизации - сбрасываем ключ
+                // Если ошибка авторизации - сбрасываем ключ и показываем модальное окно
                 if (error.message.includes('401') || error.message.includes('UNAUTHORIZED')) {
                     console.warn('Неверный ключ. Очищаем localStorage...');
                     localStorage.removeItem(STORAGE_KEY);
-                    alert('Неверный секретный ключ. Пожалуйста, обновите страницу и введите правильный ключ.');
+                    ADMIN_SECRET = null;
+                    document.getElementById('mainContainer').style.display = 'none';
+                    showKeyModal();
+                    const errorMsg = document.getElementById('keyError');
+                    errorMsg.textContent = '❌ Неверный секретный ключ! Пожалуйста, введите правильный ключ.';
+                    errorMsg.classList.add('show');
                 }
             }
         }
@@ -631,10 +895,15 @@
                         resultsDiv.style.display = 'block';
                     }
                     
-                    // Если ошибка авторизации - сбрасываем ключ
+                    // Если ошибка авторизации - сбрасываем ключ и показываем модальное окно
                     if (data.error === 'UNAUTHORIZED') {
                         localStorage.removeItem(STORAGE_KEY);
-                        alert('Неверный секретный ключ. Пожалуйста, обновите страницу и введите правильный ключ.');
+                        ADMIN_SECRET = null;
+                        document.getElementById('mainContainer').style.display = 'none';
+                        showKeyModal();
+                        const errorMsg = document.getElementById('keyError');
+                        errorMsg.textContent = '❌ Неверный секретный ключ! Пожалуйста, введите правильный ключ.';
+                        errorMsg.classList.add('show');
                     }
                 }
             } catch (error) {
@@ -652,10 +921,15 @@
                     resultsDiv.style.display = 'block';
                 }
                 
-                // Если ошибка авторизации - сбрасываем ключ
+                // Если ошибка авторизации - сбрасываем ключ и показываем модальное окно
                 if (error.message.includes('401') || error.message.includes('UNAUTHORIZED')) {
                     localStorage.removeItem(STORAGE_KEY);
-                    alert('Неверный секретный ключ. Пожалуйста, обновите страницу и введите правильный ключ.');
+                    ADMIN_SECRET = null;
+                    document.getElementById('mainContainer').style.display = 'none';
+                    showKeyModal();
+                    const errorMsg = document.getElementById('keyError');
+                    errorMsg.textContent = '❌ Неверный секретный ключ! Пожалуйста, введите правильный ключ.';
+                    errorMsg.classList.add('show');
                 }
             }
         });
