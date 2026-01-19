@@ -31,6 +31,10 @@ const PORT = process.env.PAYMENT_PORT || 4000;
     
     // Подключаем админ-нотификатор (уведомления в группу)
     initAdminNotifier(bot);
+    
+    // Инициализируем систему реферальных бонусов
+    const { initReferralBonus } = require("./referral-bonus");
+    initReferralBonus(bot);
 
     // Инициализируем модуль рассылок СРАЗУ (бот уже создан, просто еще не запущен)
     initBroadcast(bot);

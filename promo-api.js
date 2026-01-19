@@ -3,6 +3,7 @@ const { prisma } = require("./db");
 const { ruMoney } = require("./menus");
 const { ADMIN_BROADCAST_SECRET } = require("./broadcast-api");
 const { activatePromoCode, detectPromoType, PROMO_TYPES } = require("./promo-manager");
+const { getReferralStats } = require("./referral-bonus");
 
 /**
  * Middleware для проверки админ-доступа
@@ -194,6 +195,9 @@ function registerPromoAPI(app) {
         });
       }
 
+      // Получаем статистику реферальных бонусов
+      const referralStats = await getReferralStats(user.id);
+
       res.json({
         ok: true,
         data: {
@@ -201,10 +205,8 @@ function registerPromoAPI(app) {
           hasPromoCode: !!user.promoCode,
           activations: {
             count: user.promoActivationsAsOwner.length,
-            totalAmount: user.promoActivationsAsOwner.reduce((sum, a) => sum + a.amount, 0),
             list: user.promoActivationsAsOwner.map(a => ({
               id: a.id,
-              amount: a.amount,
               createdAt: a.createdAt,
               activator: {
                 id: a.activator.id,
@@ -213,8 +215,12 @@ function registerPromoAPI(app) {
               }
             }))
           },
+          referralStats: {
+            totalBonusAmount: referralStats.totalBonusAmount,
+            totalTopupsAmount: referralStats.totalTopupsAmount,
+            bonusesCount: referralStats.bonuses.length
+          },
           activated: user.promoActivationAsUser ? {
-            amount: user.promoActivationAsUser.amount,
             createdAt: user.promoActivationAsUser.createdAt,
             codeOwner: {
               id: user.promoActivationAsUser.codeOwner.id,

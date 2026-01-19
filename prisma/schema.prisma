@@ -30,6 +30,8 @@ model User {
   promoActivationsAsOwner   PromoActivation[] @relation("OwnerActivations")
   promoActivationAsUser     PromoActivation?  @relation("UserActivation")
   adminPromoActivations AdminPromoActivation[] // активации админских промокодов
+  referralBonusesAsOwner ReferralBonus[] @relation("ReferralBonusOwner") // бонусы от рефералов
+  referralBonusesAsActivator ReferralBonus[] @relation("ReferralBonusActivator") // бонусы, которые пользователь принес владельцу
 
   subscriptions Subscription[]
   topUps         TopUp[]
@@ -43,7 +45,6 @@ model PromoActivation {
   id           Int      @id @default(autoincrement())
   codeOwnerId  Int
   activatorId  Int      @unique      // 🔒 один активатор — одна активация любого промо
-  amount       Int      @default(100)
   createdAt    DateTime @default(now())
 
   // связи
@@ -85,6 +86,8 @@ model TopUp {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  referralBonuses ReferralBonus[] // реферальные бонусы от этого пополнения
+
   @@index([userId, createdAt])
 }
 
@@ -122,6 +125,28 @@ model AdminPromoActivation {
   @@unique([promoId, userId])              // один пользователь может активировать промокод только один раз
   @@index([promoId])
   @@index([userId])
+}
+
+// Реферальные бонусы (20% от пополнений владельцу промокода)
+model ReferralBonus {
+  id           Int      @id @default(autoincrement())
+  codeOwnerId  Int                           // владелец промокода (кто получит бонус)
+  activatorId  Int                           // кто пополнил баланс (активатор промокода)
+  topupId      Int                           // ID пополнения
+  amount       Int                           // сумма пополнения (в копейках)
+  bonusAmount  Int                           // 20% от суммы пополнения (в копейках)
+  credited     Boolean  @default(false)      // зачислен ли бонус владельцу
+  creditedAt   DateTime?                     // когда зачислен
+  createdAt    DateTime @default(now())      // когда создан бонус
+
+  // связи
+  codeOwner    User     @relation("ReferralBonusOwner", fields: [codeOwnerId], references: [id])
+  activator    User     @relation("ReferralBonusActivator", fields: [activatorId], references: [id])
+  topup        TopUp    @relation(fields: [topupId], references: [id])
+
+  @@index([codeOwnerId, createdAt])         // для поиска бонусов владельца
+  @@index([activatorId])                    // для поиска бонусов активатора
+  @@index([topupId])                        // для поиска по пополнению
 }
 
 

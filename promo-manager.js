@@ -302,12 +302,11 @@ async function activateReferralPromo(userId, owner) {
         return { ok: false, reason: "ALREADY_ACTIVATED" };
       }
       
-      // Создаем запись активации
+      // Создаем запись активации (amount больше не используется)
       await tx.promoActivation.create({
         data: {
           codeOwnerId: owner.id,
-          activatorId: userId,
-          amount: 0
+          activatorId: userId
         }
       });
       
