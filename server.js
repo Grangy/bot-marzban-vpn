@@ -6,6 +6,7 @@ const path = require("path");
 const { handlePostback, markTopupSuccessAndCredit, markTopupFailed } = require("./payment");
 const { registerWebAppAPI } = require("./webapp-api");
 const { registerBroadcastAPI } = require("./broadcast-api");
+const { registerPromoAPI } = require("./promo-api");
 
 function createServer() {
   const app = express();
@@ -160,6 +161,9 @@ function createServer() {
 
   // Регистрируем Broadcast API (веб-интерфейс рассылок)
   registerBroadcastAPI(app);
+
+  // Регистрируем Promo API (работа с промокодами)
+  registerPromoAPI(app);
 
   return app;
 }
