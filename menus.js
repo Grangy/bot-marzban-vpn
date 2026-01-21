@@ -5,25 +5,25 @@ const {
 const PLANS = {
   M1: {
     label: "1 месяц",
-    price: 100,
+    price: 120,
     months: 1,
     type: "M1"
   },
   M3: {
     label: "3 месяца",
-    price: 270,
+    price: 350,
     months: 3,
     type: "M3"
   },
   M6: {
     label: "6 месяцев",
-    price: 520,
+    price: 700,
     months: 6,
     type: "M6"
   },
   M12: {
     label: "12 месяцев",
-    price: 1000,
+    price: 1400,
     months: 12,
     type: "M12"
   },
