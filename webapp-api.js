@@ -723,9 +723,13 @@ function registerWebAppAPI(app) {
 
   /**
    * GET /api/plans
-   * Получить список тарифов
+   * Получить список тарифов.
+   * buyUrl — ссылка на бота для кнопки «Приобрести» (t.me/BOT?start=plan_M1…).
    */
   app.get("/api/plans", (req, res) => {
+    const botUsername = process.env.BOT_USERNAME || "maxvpn_offbot";
+    const baseUrl = `https://t.me/${botUsername}`;
+
     const plans = Object.entries(PLANS)
       .filter(([key]) => key !== "PROMO_10D" && key !== "FREE")
       .map(([key, plan]) => ({
@@ -733,7 +737,8 @@ function registerWebAppAPI(app) {
         label: plan.label,
         price: plan.price,
         months: plan.months,
-        pricePerMonth: Math.round(plan.price / plan.months)
+        pricePerMonth: Math.round(plan.price / plan.months),
+        buyUrl: `${baseUrl}?start=plan_${key}`
       }));
 
     res.json({

@@ -133,6 +133,17 @@ function buyMenu() {
   ]);
 }
 
+/** Клавиатура для deep link ?start=plan_M1: выбран план — «Приобрести» и «В меню» */
+function planSelectedMenu(planKey) {
+  const plan = PLANS[planKey];
+  if (!plan) return mainMenu(0);
+  return Markup.inlineKeyboard([
+    [Markup.button.callback(`🛒 Приобрести — ${ruMoney(plan.price)}`, `buy_${planKey}`)],
+    [Markup.button.callback("📋 Другие тарифы", "buy")],
+    [Markup.button.callback("⬅️ В меню", "back")],
+  ]);
+}
+
 function balanceMenu(balanceRub = 0) {
   return Markup.inlineKeyboard([
     [Markup.button.callback(`💼 Баланс: ${ruMoney(balanceRub)}`, "balance_refresh")],
@@ -170,9 +181,10 @@ module.exports = {
   balanceMenu,
   buyMenu,
   topupMenu,
-  paymentSuccessMenu, // 👈 новая функция
-  getDisplayLabel, // 👈 добавляем сюда
-  infoMenu, // 👈 экспортируем
+  planSelectedMenu,
+  paymentSuccessMenu,
+  getDisplayLabel,
+  infoMenu,
   instructionsMenu,
-    promoMenu, // 👈 экспортируем 
+  promoMenu,
 };

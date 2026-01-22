@@ -1,9 +1,9 @@
 const { Telegraf } = require("telegraf");
 const { prisma } = require("./db");
 const { SubscriptionType } = require("@prisma/client");
-const { mainMenu } = require("./menus");
+const { mainMenu, planSelectedMenu, PLANS, ruMoney } = require("./menus");
 const { registerActions } = require("./actions");
-const { registerPromo } = require("./promo");  // 👈
+const { registerPromo } = require("./promo");
 const crypto = require("crypto");
 
 
@@ -71,19 +71,38 @@ function genPromo() {
 
 /* Команды */
 bot.start(async (ctx) => {
-  // Проверяем, что пользователь был создан в middleware
   if (!ctx.dbUser || !ctx.dbUser.id) {
     console.error("[BOT] ctx.dbUser is undefined in /start command");
     return ctx.reply("❌ Ошибка инициализации. Попробуйте еще раз.");
   }
-  
+
   const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
-  
   if (!user) {
     console.error("[BOT] User not found in database:", ctx.dbUser.id);
     return ctx.reply("❌ Пользователь не найден. Попробуйте еще раз.");
   }
-  
+
+  const raw = (ctx.message?.text || "").trim();
+  const planMatch = raw.match(/^\/start(?:@\w+)?\s+plan_(M1|M3|M6|M12)$/i);
+
+  if (planMatch) {
+    const planKey = planMatch[1].toUpperCase();
+    const plan = PLANS[planKey];
+    if (!plan) {
+      await ctx.reply("❌ Неизвестный план. Выберите действие:", mainMenu(user.balance));
+      return;
+    }
+
+    const planText = `🛒 Выбран тариф: **${plan.label}** — ${ruMoney(plan.price)}
+
+Оплата производится с баланса в боте. Если средств не хватает — пополните баланс, затем нажмите «Приобрести».
+
+Выберите действие:`;
+
+    await ctx.replyWithMarkdown(planText, planSelectedMenu(planKey));
+    return;
+  }
+
   const welcomeText = `👋 Вас приветствует MaxGroot!
 
 Этот сервис для защиты вашего интернета.
@@ -99,7 +118,7 @@ bot.start(async (ctx) => {
 @vpnmax_off
 
 Выберите действие:`;
-  
+
   await ctx.reply(welcomeText, mainMenu(user.balance));
 });
 
