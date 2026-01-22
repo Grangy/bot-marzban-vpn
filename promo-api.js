@@ -324,6 +324,7 @@ function registerPromoAPI(app) {
         select: {
           id: true,
           telegramId: true,
+          chatId: true,
           accountName: true,
           promoCode: true,
           createdAt: true,
@@ -331,7 +332,6 @@ function registerPromoAPI(app) {
             promoActivationsAsOwner: {
               select: {
                 id: true,
-                amount: true,
                 createdAt: true,
                 activator: {
                   select: {
@@ -375,7 +375,6 @@ function registerPromoAPI(app) {
             ...(withActivations === "true" && {
               activations: {
                 count: u.promoActivationsAsOwner?.length || 0,
-                totalAmount: u.promoActivationsAsOwner?.reduce((sum, a) => sum + a.amount, 0) || 0,
                 list: u.promoActivationsAsOwner || []
               }
             })

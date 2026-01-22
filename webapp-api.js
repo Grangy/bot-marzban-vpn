@@ -249,7 +249,11 @@ function registerWebAppAPI(app) {
         return sum + (plan ? plan.price : 0);
       }, 0);
 
-      const promoBonusReceived = user.promoActivationsAsOwner.reduce((sum, a) => sum + a.amount, 0);
+      const referralBonuses = await prisma.referralBonus.findMany({
+        where: { codeOwnerId: user.id, credited: true },
+        select: { bonusAmount: true }
+      });
+      const promoBonusReceived = referralBonuses.reduce((sum, b) => sum + b.bonusAmount, 0);
       const adminPromos = await prisma.adminPromo.findMany({
         where: { usedById: user.id },
         select: { amount: true }
@@ -283,7 +287,6 @@ function registerWebAppAPI(app) {
             totalTopups: user.topUps.length,
             successfulTopups: successfulTopups.length,
             totalTopupAmount: totalTopupAmount,
-            totalSpentOnSubscriptions: totalSpent,
             totalSpentOnSubscriptions: totalSpent,
             totalSpent: totalTopupAmount - Number(user.balance),
             calculatedBalance: calculatedBalance,
@@ -324,10 +327,9 @@ function registerWebAppAPI(app) {
             updatedAt: topup.updatedAt
           })),
           
-          // Промокоды (где пользователь - владелец)
+          // Промокоды (где пользователь - владелец; реф. бонусы в ReferralBonus)
           promoActivationsReceived: user.promoActivationsAsOwner.map(activation => ({
             id: activation.id,
-            amount: activation.amount,
             createdAt: activation.createdAt,
             activator: {
               id: activation.activator.id,
@@ -339,7 +341,6 @@ function registerWebAppAPI(app) {
           // Активация промокода (если пользователь использовал промокод)
           promoActivation: user.promoActivationAsUser ? {
             id: user.promoActivationAsUser.id,
-            amount: user.promoActivationAsUser.amount,
             createdAt: user.promoActivationAsUser.createdAt,
             codeOwner: {
               id: user.promoActivationAsUser.codeOwner.id,
@@ -418,12 +419,12 @@ function registerWebAppAPI(app) {
         return sum + (plan ? plan.price : 0);
       }, 0);
 
-      // Получаем промо-активации (если пользователь получил бонус от своих промокодов)
-      const promoActivations = await prisma.promoActivation.findMany({
-        where: { codeOwnerId: user.id },
-        select: { amount: true }
+      // Реферальные бонусы (20% от пополнений активаторов) — только зачисленные
+      const referralBonuses = await prisma.referralBonus.findMany({
+        where: { codeOwnerId: user.id, credited: true },
+        select: { bonusAmount: true }
       });
-      const promoBonusReceived = promoActivations.reduce((sum, a) => sum + a.amount, 0);
+      const promoBonusReceived = referralBonuses.reduce((sum, b) => sum + b.bonusAmount, 0);
 
       // Получаем админские промокоды (если использовал)
       const adminPromos = await prisma.adminPromo.findMany({
@@ -568,6 +569,12 @@ function registerWebAppAPI(app) {
         });
       }
 
+      const referralBonuses = await prisma.referralBonus.findMany({
+        where: { codeOwnerId: user.id, credited: true },
+        select: { bonusAmount: true }
+      });
+      const totalReferralBonus = referralBonuses.reduce((sum, b) => sum + b.bonusAmount, 0);
+
       // Подписки
       const activeSubs = user.subscriptions.filter(s => s.endDate && s.endDate > new Date() && s.type !== "FREE");
       const expiredSubs = user.subscriptions.filter(s => s.endDate && s.endDate <= new Date());
@@ -610,9 +617,9 @@ function registerWebAppAPI(app) {
           promo: {
             hasPromoCode: !!user.promoCode,
             activationsReceived: user.promoActivationsAsOwner.length,
-            totalReceivedAmount: user.promoActivationsAsOwner.reduce((sum, a) => sum + a.amount, 0),
+            totalReceivedAmount: totalReferralBonus,
             hasActivated: !!user.promoActivationAsUser,
-            activatedAmount: user.promoActivationAsUser?.amount || 0
+            activatedAmount: 0
           },
           financial: {
             totalTopupAmount: totalTopupAmount,
@@ -680,6 +687,12 @@ function registerWebAppAPI(app) {
         });
       }
 
+      const referralBonuses = await prisma.referralBonus.findMany({
+        where: { codeOwnerId: user.id, credited: true },
+        select: { bonusAmount: true }
+      });
+      const totalReferralBonus = referralBonuses.reduce((sum, b) => sum + b.bonusAmount, 0);
+
       res.json({
         ok: true,
         data: {
@@ -687,10 +700,9 @@ function registerWebAppAPI(app) {
           hasPromoCode: !!user.promoCode,
           activations: {
             count: user.promoActivationsAsOwner.length,
-            totalAmount: user.promoActivationsAsOwner.reduce((sum, a) => sum + a.amount, 0),
+            totalAmount: totalReferralBonus,
             list: user.promoActivationsAsOwner.map(a => ({
               id: a.id,
-              amount: a.amount,
               createdAt: a.createdAt,
               activator: {
                 id: a.activator.id,
@@ -700,7 +712,6 @@ function registerWebAppAPI(app) {
             }))
           },
           activated: user.promoActivationAsUser ? {
-            amount: user.promoActivationAsUser.amount,
             createdAt: user.promoActivationAsUser.createdAt,
             codeOwner: {
               id: user.promoActivationAsUser.codeOwner.id,
@@ -1261,8 +1272,8 @@ function registerWebAppAPI(app) {
         orderBy: { startDate: "desc" }
       });
 
-      // Промо-бонусы полученные
-      const promoActivations = await prisma.promoActivation.findMany({
+      // Реферальные бонусы (20% от пополнений активаторов)
+      const referralBonuses = await prisma.referralBonus.findMany({
         where: { codeOwnerId: user.id },
         include: {
           activator: {
@@ -1284,8 +1295,8 @@ function registerWebAppAPI(app) {
         const plan = PLANS[s.type];
         return sum + (plan ? plan.price : 0);
       }, 0);
-      const promoBonus = promoActivations.reduce((sum, a) => sum + a.amount, 0);
-      const adminBonus = adminPromos.reduce((sum, p) => sum + p.amount, 0);
+      const promoBonus = referralBonuses.filter(b => b.credited).reduce((sum, b) => sum + b.bonusAmount, 0);
+      const adminBonus = adminPromos.reduce((sum, p) => sum + (p.amount || 0), 0);
       const calculatedBalance = totalTopups + promoBonus + adminBonus - totalSpent;
 
       res.json({
@@ -1313,11 +1324,13 @@ function registerWebAppAPI(app) {
               price: PLANS[s.type]?.price || 0,
               startDate: s.startDate
             })),
-            promoActivations: promoActivations.map(a => ({
-              id: a.id,
-              amount: a.amount,
-              createdAt: a.createdAt,
-              activator: a.activator
+            referralBonuses: referralBonuses.map(b => ({
+              id: b.id,
+              bonusAmount: b.bonusAmount,
+              amount: b.amount,
+              credited: b.credited,
+              createdAt: b.createdAt,
+              activator: b.activator
             })),
             adminPromos: adminPromos.map(p => ({
               id: p.id,
