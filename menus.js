@@ -11,19 +11,19 @@ const PLANS = {
   },
   M3: {
     label: "3 месяца",
-    price: 350,
+    price: 330,
     months: 3,
     type: "M3"
   },
   M6: {
     label: "6 месяцев",
-    price: 700,
+    price: 570,
     months: 6,
     type: "M6"
   },
   M12: {
     label: "12 месяцев",
-    price: 1400,
+    price: 1140,
     months: 12,
     type: "M12"
   },
@@ -34,7 +34,7 @@ const PLANS = {
     type: "PROMO_10D"
   },
 };
-const TOPUP_AMOUNTS = [120, 350, 700, 1400];
+const TOPUP_AMOUNTS = [120, 330, 570, 1140];
 
 function ruMoney(v) {
   return `${v} ₽`;
@@ -157,9 +157,9 @@ function balanceMenu(balanceRub = 0) {
 function topupMenu() {
   return Markup.inlineKeyboard([
     [Markup.button.callback(`+ ${ruMoney(120)}`, "topup_120")],
-    [Markup.button.callback(`+ ${ruMoney(350)}`, "topup_350")],
-    [Markup.button.callback(`+ ${ruMoney(700)}`, "topup_700")],
-    [Markup.button.callback(`+ ${ruMoney(1400)}`, "topup_1400")],
+    [Markup.button.callback(`+ ${ruMoney(330)}`, "topup_330")],
+    [Markup.button.callback(`+ ${ruMoney(570)}`, "topup_570")],
+    [Markup.button.callback(`+ ${ruMoney(1140)}`, "topup_1140")],
     [Markup.button.callback("⬅️ Назад", "back")],
   ]);
 }
