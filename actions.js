@@ -28,6 +28,26 @@
   // Хранилище состояний настройки после покупки: chatId -> { subscriptionId, step, device }
   const setupStates = new Map();
 
+  /* Утилита: безопасный ответ на callback query (игнорирует ошибки устаревших запросов) */
+  async function safeAnswerCbQuery(ctx, text = null) {
+    try {
+      if (text) {
+        await ctx.answerCbQuery(text);
+      } else {
+        await ctx.answerCbQuery();
+      }
+    } catch (error) {
+      // Игнорируем ошибки устаревших callback query
+      if (error.response?.error_code === 400 && 
+          (error.response?.description?.includes("query is too old") || 
+           error.response?.description?.includes("query ID is invalid"))) {
+        // Это нормально - запрос устарел, просто игнорируем
+        return;
+      }
+      // Другие ошибки логируем, но не падаем
+      console.warn("[ACTIONS] answerCbQuery error:", error.message);
+    }
+  }
 
   /* Утилита: проверка ctx.dbUser */
   function ensureDbUser(ctx) {
@@ -48,14 +68,14 @@
       const nextKb = JSON.stringify(keyboard?.reply_markup?.inline_keyboard || []);
 
       if (currentText === text && currentKb === nextKb) {
-        await ctx.answerCbQuery("Актуально");
+        await safeAnswerCbQuery(ctx, "Актуально");
         return;
       }
       await ctx.editMessageText(text, keyboard);
     } catch (err) {
       const desc = err?.response?.description || err?.message || "";
       if (desc.includes("message is not modified")) {
-        await ctx.answerCbQuery("Актуально");
+        await safeAnswerCbQuery(ctx, "Актуально");
         return;
       }
       if (desc.includes("message can't be edited") || desc.includes("there is no text in the message to edit")) {
@@ -68,9 +88,26 @@
 
   /* Регистрируем все действия */
   function registerActions(bot) {
+    // Middleware для безопасной обработки ошибок в действиях
+    bot.use(async (ctx, next) => {
+      if (ctx.callbackQuery) {
+        try {
+          return await next();
+        } catch (error) {
+          console.error("[ACTIONS] Error in action handler:", error.message);
+          console.error("[ACTIONS] Action:", ctx.callbackQuery?.data);
+          console.error("[ACTIONS] Stack:", error.stack);
+          // Пытаемся безопасно ответить на callback query
+          await safeAnswerCbQuery(ctx);
+          // Не отправляем сообщение об ошибке - это может вызвать еще больше проблем
+          return;
+        }
+      }
+      return next();
+    });
     // Назад — главное меню (регистрируем первым)
     bot.action("back", async (ctx) => {
-      await ctx.answerCbQuery();
+      await safeAnswerCbQuery(ctx);
       try {
         ensureDbUser(ctx);
       } catch (e) {
@@ -90,7 +127,7 @@
 
     // Информация — баланс и подписки
 bot.action("instructions", async (ctx) => {
-  await ctx.answerCbQuery();
+  await safeAnswerCbQuery(ctx);
   await editOrAnswer(ctx, "📖 Выберите платформу:", instructionsMenu());
 });
 
@@ -199,21 +236,21 @@ function deviceInstructionMenu(deviceType) {
 
 // iOS / macOS
 bot.action("guide_ios", async (ctx) => {
-  await ctx.answerCbQuery();
+  await safeAnswerCbQuery(ctx);
   const text = getInstructionTextForDevice("ios");
   await editOrAnswer(ctx, text, deviceInstructionMenu("ios"));
 });
 
 // Android
 bot.action("guide_android", async (ctx) => {
-  await ctx.answerCbQuery();
+  await safeAnswerCbQuery(ctx);
   const text = getInstructionTextForDevice("android");
   await editOrAnswer(ctx, text, deviceInstructionMenu("android"));
 });
 
 // Android TV (с картинками)
 bot.action("guide_android_tv", async (ctx) => {
-  await ctx.answerCbQuery();
+  await safeAnswerCbQuery(ctx);
   const text = getInstructionTextForDevice("android_tv");
   
   // Отправляем картинки с инструкцией
@@ -233,21 +270,21 @@ bot.action("guide_android_tv", async (ctx) => {
 
 // Windows
 bot.action("guide_windows", async (ctx) => {
-  await ctx.answerCbQuery();
+  await safeAnswerCbQuery(ctx);
   const text = getInstructionTextForDevice("windows");
   await editOrAnswer(ctx, text, deviceInstructionMenu("windows"));
 });
 
 // macOS (отдельный обработчик для возврата из видео)
 bot.action("guide_macos", async (ctx) => {
-  await ctx.answerCbQuery();
+  await safeAnswerCbQuery(ctx);
   const text = getInstructionTextForDevice("macos");
   await editOrAnswer(ctx, text, deviceInstructionMenu("macos"));
 });
 
 // Динамическая видео-инструкция для каждого устройства
 bot.action(/^guide_video_(ios|android|android_tv|windows|macos)$/, async (ctx) => {
-  await ctx.answerCbQuery();
+  await safeAnswerCbQuery(ctx);
   const deviceType = ctx.match[1];
   const videoFile = getVideoFileForDevice(deviceType);
   
@@ -283,7 +320,7 @@ bot.action(/^guide_video_(ios|android|android_tv|windows|macos)$/, async (ctx) =
 });
     // Купить подписку — если нет средств, сразу ведём в пополнение
     bot.action("buy", async (ctx) => {
-      await ctx.answerCbQuery();
+      await safeAnswerCbQuery(ctx);
 
       const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
 
@@ -310,33 +347,33 @@ bot.action(/^guide_video_(ios|android|android_tv|windows|macos)$/, async (ctx) =
 
   // Информация — теперь открывает подменю
 bot.action("info", async (ctx) => {
-  await ctx.answerCbQuery();
+  await safeAnswerCbQuery(ctx);
   await editOrAnswer(ctx, "ℹ️ Информация:", infoMenu(ctx.dbUser.balance));
 });
 
 
 // Пользовательское соглашение
 bot.action("tos", async (ctx) => {
-  await ctx.answerCbQuery();
+  await safeAnswerCbQuery(ctx);
   const text = fs.readFileSync("texts/tos.txt", "utf8");
   await editOrAnswer(ctx, text, infoMenu(ctx.dbUser.balance));
 });
 
 // Политика конфиденциальности
 bot.action("privacy", async (ctx) => {
-  await ctx.answerCbQuery();
+  await safeAnswerCbQuery(ctx);
   const text = fs.readFileSync("texts/privacy.txt", "utf8");
   await editOrAnswer(ctx, text, infoMenu(ctx.dbUser.balance));
 });
 
 bot.action("balance_topup", async (ctx) => {
-  await ctx.answerCbQuery();
+  await safeAnswerCbQuery(ctx);
   const text = "Выберите сумму пополнения:";
   await editOrAnswer(ctx, text, topupMenu());
 });
 
 bot.action("balance_refresh", async (ctx) => {
-  await ctx.answerCbQuery();
+  await safeAnswerCbQuery(ctx);
   const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
   const text =
 `💼 Баланс: ${ruMoney(user.balance)}
@@ -347,7 +384,7 @@ bot.action("balance_refresh", async (ctx) => {
 
   // внутри registerActions(bot)
   bot.action(/^buy_(M1|M3|M6|M12)$/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await safeAnswerCbQuery(ctx);
     const planKey = ctx.match[1];
     const plan = PLANS[planKey];
 
@@ -444,7 +481,7 @@ setupStates.set(chatId, { subscriptionId: result.sub.id, step: 'device_select' }
 
 
 bot.action("balance", async (ctx) => {
-  await ctx.answerCbQuery();
+  await safeAnswerCbQuery(ctx);
   const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
 
   const text =
@@ -469,7 +506,7 @@ bot.action("balance", async (ctx) => {
 
 bot.action(/^topup_(\d+)$/, async (ctx) => {
   // Сразу отвечаем на callback query чтобы избежать timeout
-  await ctx.answerCbQuery("⏳ Создаём счёт...");
+  await safeAnswerCbQuery(ctx, "⏳ Создаём счёт...");
   
   const amount = parseInt(ctx.match[1], 10);
 
@@ -528,7 +565,7 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
 
 
   bot.action(/^check_topup_(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await safeAnswerCbQuery(ctx);
     const id = parseInt(ctx.match[1], 10);
     if (isNaN(id)) {
       console.warn(`[CHECK] Invalid topup id: "${ctx.match[1]}"`);
@@ -583,7 +620,7 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
 
     // Мои подписки — список
     bot.action("my_subs", async (ctx) => {
-      await ctx.answerCbQuery();
+      await safeAnswerCbQuery(ctx);
 
       const subs = await prisma.subscription.findMany({
         where: { userId: ctx.dbUser.id },
@@ -616,7 +653,7 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
 
     // Подробности подписки
     bot.action(/sub_(\d+)/, async (ctx) => {
-      await ctx.answerCbQuery();
+      await safeAnswerCbQuery(ctx);
       const id = parseInt(ctx.match[1], 10);
       const s = await prisma.subscription.findUnique({ where: { id } });
 
@@ -650,7 +687,7 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
 
   // Меню выбора срока продления
   bot.action(/extend_choose_(\d+)/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await safeAnswerCbQuery(ctx);
     const id = parseInt(ctx.match[1], 10);
     const sub = await prisma.subscription.findUnique({ where: { id } });
 
@@ -670,7 +707,7 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
 
   // Продление подписки на выбранный срок
   bot.action(/extend_(\d+)_(M1|M3|M6|M12)$/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await safeAnswerCbQuery(ctx);
     const id = parseInt(ctx.match[1], 10);
     const planKey = ctx.match[2];
     const plan = PLANS[planKey];
@@ -754,7 +791,7 @@ return tx.subscription.update({
   
   // Шаг 1: Выбор устройства
   bot.action(/^setup_device_(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await safeAnswerCbQuery(ctx);
     const subscriptionId = parseInt(ctx.match[1], 10);
     const chatId = String(ctx.chat?.id || ctx.from?.id);
     
@@ -783,7 +820,7 @@ return tx.subscription.update({
 
   // Шаг 2: После выбора устройства - скачать приложение
   bot.action(/^setup_choose_(ios|android|android_tv|windows|macos)_(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await safeAnswerCbQuery(ctx);
     const device = ctx.match[1];
     const subscriptionId = parseInt(ctx.match[2], 10);
     const chatId = String(ctx.chat?.id || ctx.from?.id);
@@ -830,7 +867,7 @@ return tx.subscription.update({
 
   // Шаг 3: После скачивания - пошаговая инструкция
   bot.action(/^setup_downloaded_(ios|android|android_tv|windows|macos)_(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await safeAnswerCbQuery(ctx);
     const device = ctx.match[1];
     const subscriptionId = parseInt(ctx.match[2], 10);
     const chatId = String(ctx.chat?.id || ctx.from?.id);
@@ -941,7 +978,7 @@ return tx.subscription.update({
 
   // Обработчик для кнопки "Видео-инструкция" на этапе настройки (с учетом устройства)
   bot.action(/^setup_video_(ios|android|android_tv|windows|macos)_(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await safeAnswerCbQuery(ctx);
     const deviceType = ctx.match[1];
     const subscriptionId = parseInt(ctx.match[2], 10);
 
@@ -1000,7 +1037,7 @@ return tx.subscription.update({
 
   // Завершение настройки
   bot.action(/^setup_complete_(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery();
+    await safeAnswerCbQuery(ctx);
     const subscriptionId = parseInt(ctx.match[1], 10);
     const chatId = String(ctx.chat?.id || ctx.from?.id);
 

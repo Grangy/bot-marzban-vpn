@@ -71,5 +71,19 @@ const shutdown = async (signal) => {
   }
 };
 
+// Глобальная обработка необработанных ошибок
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("[UNHANDLED REJECTION] Unhandled Promise Rejection:", reason);
+  console.error("[UNHANDLED REJECTION] Promise:", promise);
+  // Не завершаем процесс - продолжаем работу
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("[UNCAUGHT EXCEPTION] Uncaught Exception:", error);
+  console.error("[UNCAUGHT EXCEPTION] Stack:", error.stack);
+  // Не завершаем процесс - продолжаем работу
+  // В критических случаях можно перезапустить через PM2
+});
+
 process.once("SIGINT", () => shutdown("SIGINT"));
 process.once("SIGTERM", () => shutdown("SIGTERM"));

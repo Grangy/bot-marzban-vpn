@@ -93,6 +93,11 @@ async function createInvoice(userId, amount, description = "Пополнение
     body: body
   });
 
+  // Таймаут для запроса: 10 секунд
+  const TIMEOUT_MS = 10000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
   let response;
   try {
     response = await fetch(API_URL, {
@@ -103,9 +108,18 @@ async function createInvoice(userId, amount, description = "Пополнение
         "X-Secret": SECRET_KEY,
       },
       body: JSON.stringify(body),
-      timeout: 10000, // 10 секунд таймаут
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
   } catch (fetchError) {
+    clearTimeout(timeoutId);
+    
+    // Игнорируем AbortError (таймаут) - это нормально, используем fallback
+    if (fetchError.name === 'AbortError' || fetchError.type === 'aborted') {
+      console.warn("[TOPUP] Request timeout (10s), using fallback payment system");
+      return await createFallbackPayment();
+    }
+    
     console.error("[Platega] Network error:", fetchError);
     
     // Если сеть недоступна, используем fallback

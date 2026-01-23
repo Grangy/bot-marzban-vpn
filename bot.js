@@ -139,6 +139,26 @@ bot.command("menu", async (ctx) => {
   await ctx.reply("Меню:", mainMenu(user.balance));
 });
 
+/* Глобальный обработчик ошибок для бота */
+bot.catch((err, ctx) => {
+  // Игнорируем ошибки устаревших callback query
+  if (err.response?.error_code === 400 && 
+      (err.response?.description?.includes("query is too old") || 
+       err.response?.description?.includes("query ID is invalid"))) {
+    // Это нормально - запрос устарел, просто логируем и игнорируем
+    console.warn("[BOT] Expired callback query ignored:", ctx.callbackQuery?.data || "unknown");
+    return;
+  }
+  
+  // Логируем другие ошибки
+  console.error("[BOT] Global error handler:", err.message || err);
+  console.error("[BOT] Update type:", ctx.updateType);
+  console.error("[BOT] Update ID:", ctx.update?.update_id);
+  
+  // Не пытаемся отправлять сообщение об ошибке - это может вызвать еще больше ошибок
+  // Просто логируем и продолжаем работу
+});
+
 /* 👇 Обязательно регистрируем действия ДО экспорта */
 registerActions(bot);
 registerPromo(bot);
