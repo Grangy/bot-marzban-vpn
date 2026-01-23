@@ -371,7 +371,7 @@ async function activateReferralPromo(userId, owner) {
       message += `\n\n🔗 Ссылка на подписку: ${updatedSub.subscriptionUrl}`;
     }
     if (updatedSub.subscriptionUrl2) {
-      message += `\n\n🔗 Ссылка для операторов Миранда: ${updatedSub.subscriptionUrl2}`;
+      message += `\n\n🔗 Ссылка для операторов МТС, Миранда и других: ${updatedSub.subscriptionUrl2}`;
     }
     
     message += `\n\n📱 Инструкции по настройке в разделе "📖 Инструкции"`;
@@ -537,7 +537,7 @@ async function activateAdminDaysPromo(userId, promo) {
       message += `\n\n🔗 Ссылка на подписку: ${updatedSub.subscriptionUrl}`;
     }
     if (updatedSub.subscriptionUrl2) {
-      message += `\n\n🔗 Ссылка для операторов Миранда: ${updatedSub.subscriptionUrl2}`;
+      message += `\n\n🔗 Ссылка для операторов МТС, Миранда и других: ${updatedSub.subscriptionUrl2}`;
     }
     
     message += `\n\n📱 Инструкции по настройке в разделе "📖 Инструкции"`;
