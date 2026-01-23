@@ -231,16 +231,12 @@ function registerPromo(bot) {
     const result = await activatePromoCodeForUser(ctx, inputCode);
 
     if (result.ok) {
-      // Для промокодов на дни (админские и реферальные) добавляем кнопки "Инструкции" и "В меню"
-      if (result.type === PROMO_TYPES.ADMIN_DAYS || result.type === PROMO_TYPES.REFERRAL) {
-        const keyboard = Markup.inlineKeyboard([
-          [Markup.button.callback("📖 Инструкции", "instructions")],
-          [Markup.button.callback("⬅️ В меню", "back")]
-        ]);
-        await ctx.reply(result.message, keyboard);
-      } else {
-        await ctx.reply(result.message);
-      }
+      // Для всех успешных активаций промокодов добавляем кнопки "Инструкции" и "В меню"
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback("📖 Инструкции", "instructions")],
+        [Markup.button.callback("⬅️ В меню", "back")]
+      ]);
+      await ctx.reply(result.message, keyboard);
       // Не вызываем next(), так как мы обработали сообщение
     } else {
       await ctx.reply(result.message);
@@ -273,16 +269,12 @@ function registerPromo(bot) {
     const result = await activatePromoCodeForUser(ctx, inputCode);
 
     if (result.ok) {
-      // Для промокодов на дни (админские и реферальные) добавляем кнопки "Инструкции" и "В меню"
-      if (result.type === PROMO_TYPES.ADMIN_DAYS || result.type === PROMO_TYPES.REFERRAL) {
-        const keyboard = Markup.inlineKeyboard([
-          [Markup.button.callback("📖 Инструкции", "instructions")],
-          [Markup.button.callback("⬅️ В меню", "back")]
-        ]);
-        return ctx.reply(result.message, keyboard);
-      } else {
-        return ctx.reply(result.message);
-      }
+      // Для всех успешных активаций промокодов добавляем кнопки "Инструкции" и "В меню"
+      const keyboard = Markup.inlineKeyboard([
+        [Markup.button.callback("📖 Инструкции", "instructions")],
+        [Markup.button.callback("⬅️ В меню", "back")]
+      ]);
+      return ctx.reply(result.message, keyboard);
     } else {
       return ctx.reply(result.message);
     }
