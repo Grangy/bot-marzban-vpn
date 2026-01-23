@@ -2,8 +2,8 @@
 // Использует promo-manager.js для логики активации
 const { prisma } = require("./db");
 const { Markup } = require("telegraf");
-const { promoMenu, ruMoney } = require("./menus");
-const { activatePromoCode, getUserPromoStats } = require("./promo-manager");
+const { promoMenu, ruMoney, instructionsMenu, mainMenu } = require("./menus");
+const { activatePromoCode, getUserPromoStats, PROMO_TYPES } = require("./promo-manager");
 const { getReferralStats } = require("./referral-bonus");
 
 // Хранилище пользователей, ожидающих ввода промокода (chatId -> true)
@@ -231,7 +231,16 @@ function registerPromo(bot) {
     const result = await activatePromoCodeForUser(ctx, inputCode);
 
     if (result.ok) {
-      await ctx.reply(result.message);
+      // Для промокодов на дни (админские и реферальные) добавляем кнопки "Инструкции" и "В меню"
+      if (result.type === PROMO_TYPES.ADMIN_DAYS || result.type === PROMO_TYPES.REFERRAL) {
+        const keyboard = Markup.inlineKeyboard([
+          [Markup.button.callback("📖 Инструкции", "instructions")],
+          [Markup.button.callback("⬅️ В меню", "back")]
+        ]);
+        await ctx.reply(result.message, keyboard);
+      } else {
+        await ctx.reply(result.message);
+      }
       // Не вызываем next(), так как мы обработали сообщение
     } else {
       await ctx.reply(result.message);
@@ -264,7 +273,16 @@ function registerPromo(bot) {
     const result = await activatePromoCodeForUser(ctx, inputCode);
 
     if (result.ok) {
-      return ctx.reply(result.message);
+      // Для промокодов на дни (админские и реферальные) добавляем кнопки "Инструкции" и "В меню"
+      if (result.type === PROMO_TYPES.ADMIN_DAYS || result.type === PROMO_TYPES.REFERRAL) {
+        const keyboard = Markup.inlineKeyboard([
+          [Markup.button.callback("📖 Инструкции", "instructions")],
+          [Markup.button.callback("⬅️ В меню", "back")]
+        ]);
+        return ctx.reply(result.message, keyboard);
+      } else {
+        return ctx.reply(result.message);
+      }
     } else {
       return ctx.reply(result.message);
     }
