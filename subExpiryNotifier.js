@@ -46,7 +46,18 @@ function startSubExpiryNotifier(bot) {
           const kb = Markup.inlineKeyboard([
             [Markup.button.callback("🔄 Продлить", `extend_choose_${s.id}`)],
           ]);
-          await bot.telegram.sendMessage(chatId, text, kb);
+          try {
+            await bot.telegram.sendMessage(chatId, text, kb);
+          } catch (error) {
+            // Игнорируем ошибку, если бот заблокирован пользователем
+            if (error.response?.error_code === 403 && 
+                error.response?.description?.includes("bot was blocked by the user")) {
+              console.warn(`[SUB NOTIFIER] Bot blocked by user ${chatId}, skipping notification`);
+              return;
+            }
+            // Логируем другие ошибки
+            console.error(`[SUB NOTIFIER] Error sending notification to ${chatId}:`, error.message);
+          }
         }
       }
     }

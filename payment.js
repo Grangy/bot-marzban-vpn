@@ -33,32 +33,6 @@ async function createInvoice(userId, amount, description = "Пополнение
     };
   }
 
-  // Функция для создания fallback платежа
-  async function createFallbackPayment() {
-    console.warn("[TOPUP] Using fallback payment system due to API issues");
-    console.warn("[TOPUP] Fallback details:", { orderId, amount, userId });
-    
-    // Помечаем topup как fallback
-    await prisma.topUp.update({
-      where: { id: topup.id },
-      data: { 
-        status: "PENDING",
-        billId: `fallback-${orderId}` // Отмечаем как fallback
-      }
-    });
-
-    // Создаем простую ссылку для ручной оплаты
-    const fallbackLink = `${process.env.PAYMENT_CALLBACK_URL || "https://maxvpn.live"}/payment/manual/${orderId}`;
-    
-    console.warn("[TOPUP] Fallback payment created:", { orderId, fallbackLink });
-    
-    return {
-      link: fallbackLink,
-      topup: { ...topup, billId: `fallback-${orderId}` },
-      isFallback: true
-    };
-  }
-
   // Валидация данных перед отправкой
   if (!orderId || !amount || !description) {
     throw new Error("Некорректные данные для создания платежа");
@@ -87,106 +61,131 @@ async function createInvoice(userId, amount, description = "Пополнение
     throw new Error("Некорректные параметры платежа");
   }
 
+  // Функция для создания платежа с повторными попытками
+  async function createPaymentWithRetry(maxRetries = 2) {
+    // Таймаут для запроса: 30 секунд (увеличен)
+    const TIMEOUT_MS = 30000;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      console.log(`[TOPUP] Attempt ${attempt}/${maxRetries} to create payment for orderId: ${orderId}`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      let response;
+      try {
+        response = await fetch(API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-MerchantId": MERCHANT_ID,
+            "X-Secret": SECRET_KEY,
+          },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        
+        // Если это таймаут или сетевая ошибка, пробуем еще раз
+        if (fetchError.name === 'AbortError' || fetchError.type === 'aborted') {
+          console.warn(`[TOPUP] Request timeout (${TIMEOUT_MS}ms) on attempt ${attempt}/${maxRetries}`);
+          if (attempt < maxRetries) {
+            // Ждем перед следующей попыткой
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            continue;
+          }
+          throw new Error(`Таймаут запроса к платежной системе после ${maxRetries} попыток. Попробуйте еще раз.`);
+        }
+        
+        console.error("[Platega] Network error:", fetchError);
+        
+        // Если сеть недоступна, пробуем еще раз
+        if (fetchError.code === 'ENOTFOUND' || fetchError.code === 'ECONNREFUSED' || fetchError.code === 'ETIMEDOUT') {
+          console.warn(`[TOPUP] Network error on attempt ${attempt}/${maxRetries}`);
+          if (attempt < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            continue;
+          }
+          throw new Error("Ошибка сети при обращении к платежной системе");
+        }
+        
+        throw new Error("Ошибка сети при обращении к платежной системе");
+      }
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error("[Platega] Failed to parse response:", parseError);
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          continue;
+        }
+        const responseText = await response.text();
+        console.error("[Platega] Raw response:", responseText);
+        throw new Error("Неверный ответ от платежной системы");
+      }
+
+      console.log(`[TOPUP] Platega response (attempt ${attempt}):`, { status: response.status, data });
+
+      if (!response.ok) {
+        console.error("[Platega] API error:", {
+          status: response.status,
+          statusText: response.statusText,
+          data: data,
+          requestBody: body
+        });
+        
+        // Для некоторых ошибок пробуем еще раз
+        if (response.status >= 500 && attempt < maxRetries) {
+          console.warn(`[TOPUP] Server error on attempt ${attempt}/${maxRetries}, retrying...`);
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          continue;
+        }
+        
+        // Детальная обработка ошибок
+        if (response.status === 400) {
+          if (data?.Message) {
+            throw new Error(`Ошибка API: ${data.Message}`);
+          } else {
+            throw new Error("Ошибка запроса к платежной системе");
+          }
+        } else if (response.status === 401) {
+          throw new Error("Ошибка авторизации в платежной системе");
+        } else if (response.status === 403) {
+          throw new Error("Доступ к платежной системе запрещен");
+        } else {
+          throw new Error(`Ошибка платежной системы (статус: ${response.status})`);
+        }
+      }
+
+      if (!data.redirect) {
+        console.error("[Platega] Missing redirect in response:", data);
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          continue;
+        }
+        throw new Error("Платежная система не вернула ссылку для оплаты");
+      }
+
+      // Успешно получили ссылку
+      return { link: data.redirect, topup };
+    }
+    
+    // Если дошли сюда, все попытки исчерпаны
+    throw new Error("Не удалось создать ссылку для оплаты после нескольких попыток");
+  }
+
   console.log(`[TOPUP] Sending request to Platega:`, {
     url: API_URL,
     merchantId: MERCHANT_ID,
     body: body
   });
 
-  // Таймаут для запроса: 10 секунд
-  const TIMEOUT_MS = 10000;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-  let response;
-  try {
-    response = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-MerchantId": MERCHANT_ID,
-        "X-Secret": SECRET_KEY,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-  } catch (fetchError) {
-    clearTimeout(timeoutId);
-    
-    // Игнорируем AbortError (таймаут) - это нормально, используем fallback
-    if (fetchError.name === 'AbortError' || fetchError.type === 'aborted') {
-      console.warn("[TOPUP] Request timeout (10s), using fallback payment system");
-      return await createFallbackPayment();
-    }
-    
-    console.error("[Platega] Network error:", fetchError);
-    
-    // Если сеть недоступна, используем fallback
-    if (fetchError.code === 'ENOTFOUND' || fetchError.code === 'ECONNREFUSED' || fetchError.code === 'ETIMEDOUT') {
-      console.warn("[TOPUP] Network error, using fallback payment system");
-      return await createFallbackPayment();
-    }
-    
-    throw new Error("Ошибка сети при обращении к платежной системе");
-  }
-
-  let data;
-  try {
-    data = await response.json();
-  } catch (parseError) {
-    console.error("[Platega] Failed to parse response:", parseError);
-    const responseText = await response.text();
-    console.error("[Platega] Raw response:", responseText);
-    throw new Error("Неверный ответ от платежной системы");
-  }
-
-  console.log(`[TOPUP] Platega response:`, { status: response.status, data });
-
-  if (!response.ok) {
-    console.error("[Platega] API error:", {
-      status: response.status,
-      statusText: response.statusText,
-      data: data,
-      requestBody: body
-    });
-    
-    // Детальная обработка ошибок
-    if (response.status === 400) {
-      if (data?.Message) {
-        console.error(`[Platega] 400 Error: ${data.Message}`);
-        
-        // Если это критическая ошибка API, используем fallback
-        if (data.Message.includes("Object reference not set") || 
-            data.Message.includes("not set to an instance")) {
-          console.warn("[TOPUP] Critical API error, using fallback payment system");
-          return await createFallbackPayment();
-        }
-        
-        throw new Error(`Ошибка API: ${data.Message}`);
-      } else {
-        console.warn("[TOPUP] Unknown 400 error, using fallback payment system");
-        return await createFallbackPayment();
-      }
-    } else if (response.status === 401) {
-      throw new Error("Ошибка авторизации в платежной системе");
-    } else if (response.status === 403) {
-      throw new Error("Доступ к платежной системе запрещен");
-    } else if (response.status >= 500) {
-      console.warn("[TOPUP] Server error, using fallback payment system");
-      return await createFallbackPayment();
-    } else {
-      console.warn("[TOPUP] Unknown error, using fallback payment system");
-      return await createFallbackPayment();
-    }
-  }
-
-  if (!data.redirect) {
-    console.error("[Platega] Missing redirect in response:", data);
-    throw new Error("Платежная система не вернула ссылку для оплаты");
-  }
-
-  return { link: data.redirect, topup };
+  // Создаем платеж с повторными попытками
+  return await createPaymentWithRetry(2);
 }
 
 /** Идемпотентное зачисление */
