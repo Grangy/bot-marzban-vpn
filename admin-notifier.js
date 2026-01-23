@@ -551,6 +551,111 @@ ${isReusable ? "✅ Промокод многоразовый - можно ис�
     }
   });
 
+  // Команда /topref - топ рефералов (люди, которые пригласили больше всего друзей)
+  bot.command("topref", async (ctx) => {
+    const chatId = String(ctx.chat.id);
+    
+    if (chatId !== ADMIN_GROUP_ID) {
+      return; // Игнорируем команду из других чатов
+    }
+    
+    try {
+      await ctx.reply("⏳ Собираю статистику по рефералам...");
+      
+      // Получаем всех пользователей с их активациями промокодов
+      const usersWithReferrals = await prisma.user.findMany({
+        where: {
+          promoCode: { not: null }, // Только пользователи с промокодом
+        },
+        include: {
+          promoActivationsAsOwner: {
+            select: {
+              id: true,
+              activatorId: true,
+              createdAt: true,
+              activator: {
+                select: {
+                  accountName: true,
+                  telegramId: true,
+                }
+              }
+            }
+          },
+          referralBonusesAsOwner: {
+            select: {
+              bonusAmount: true,
+              credited: true,
+            }
+          }
+        }
+      });
+      
+      // Подсчитываем статистику для каждого пользователя
+      const stats = usersWithReferrals.map(user => {
+        const referralCount = user.promoActivationsAsOwner.length;
+        const totalBonus = user.referralBonusesAsOwner.reduce((sum, bonus) => sum + bonus.bonusAmount, 0);
+        const creditedBonus = user.referralBonusesAsOwner.filter(b => b.credited).reduce((sum, bonus) => sum + bonus.bonusAmount, 0);
+        
+        return {
+          user,
+          referralCount,
+          totalBonus,
+          creditedBonus,
+        };
+      });
+      
+      // Сортируем по количеству рефералов (по убыванию)
+      stats.sort((a, b) => b.referralCount - a.referralCount);
+      
+      // Берем топ-20
+      const topStats = stats.slice(0, 20);
+      
+      if (topStats.length === 0) {
+        return ctx.reply("📭 Нет пользователей с рефералами");
+      }
+      
+      let msg = "🏆 <b>Топ рефералов</b> (по количеству приглашенных друзей)\n\n";
+      
+      topStats.forEach((stat, index) => {
+        const user = stat.user;
+        const username = user.accountName || `ID: ${user.telegramId}`;
+        const promoCode = user.promoCode || "N/A";
+        const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}.`;
+        
+        msg += `${medal} <b>${username}</b>\n`;
+        msg += `   📋 Промокод: <code>${promoCode}</code>\n`;
+        msg += `   👥 Рефералов: <b>${stat.referralCount}</b>\n`;
+        
+        if (stat.creditedBonus > 0) {
+          msg += `   💰 Заработано бонусов: <b>${ruMoney(stat.creditedBonus)}</b>\n`;
+        }
+        
+        if (stat.totalBonus > stat.creditedBonus) {
+          msg += `   ⏳ Ожидает зачисления: ${ruMoney(stat.totalBonus - stat.creditedBonus)}\n`;
+        }
+        
+        msg += "\n";
+      });
+      
+      // Общая статистика
+      const totalReferrals = stats.reduce((sum, s) => sum + s.referralCount, 0);
+      const totalUsersWithReferrals = stats.filter(s => s.referralCount > 0).length;
+      const totalBonusEarned = stats.reduce((sum, s) => sum + s.creditedBonus, 0);
+      
+      msg += `\n📊 <b>Общая статистика:</b>\n`;
+      msg += `   👥 Всего рефералов: <b>${totalReferrals}</b>\n`;
+      msg += `   👤 Пользователей с рефералами: <b>${totalUsersWithReferrals}</b>\n`;
+      if (totalBonusEarned > 0) {
+        msg += `   💰 Всего заработано бонусов: <b>${ruMoney(totalBonusEarned)}</b>\n`;
+      }
+      
+      await ctx.reply(msg, { parse_mode: "HTML" });
+    } catch (err) {
+      console.error("[ADMIN] Error getting top referrals:", err);
+      await ctx.reply("❌ Ошибка при получении статистики рефералов");
+    }
+  });
+
   // Уведомление о успешном пополнении
   bus.on("topup.success", async ({ topupId }) => {
     try {
@@ -643,6 +748,7 @@ ${isReusable ? "✅ Промокод многоразовый - можно ис�
 
   console.log("📢 Admin notifier initialized (group: " + ADMIN_GROUP_ID + ")");
   console.log("📊 Command /stat available in admin group");
+  console.log("🏆 Command /topref available in admin group");
 }
 
 /**
