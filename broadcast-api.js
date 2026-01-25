@@ -35,21 +35,30 @@ function registerBroadcastAPI(app) {
    */
   app.post("/admin/broadcast/send", async (req, res) => {
     try {
-      const { type, message, telegramId, parseMode, hasWebAppButton } = req.body;
+      const { type, message, telegramId, parseMode, hasWebAppButton, photos: photosBase64 } = req.body;
 
-      if (!type || !message) {
+      if (!type) {
         return res.status(400).json({
           ok: false,
           error: "INVALID_PARAMS",
-          message: "type и message обязательны"
+          message: "type обязателен"
         });
       }
 
-      if (!["single", "active", "all"].includes(type)) {
+      const hasPhotos = Array.isArray(photosBase64) && photosBase64.length > 0;
+      if (!hasPhotos && !message) {
+        return res.status(400).json({
+          ok: false,
+          error: "INVALID_PARAMS",
+          message: "Укажите текст сообщения и/или приложите картинки"
+        });
+      }
+
+      if (!["single", "active", "all", "all_except_active"].includes(type)) {
         return res.status(400).json({
           ok: false,
           error: "INVALID_TYPE",
-          message: "type должен быть: single, active или all"
+          message: "type должен быть: single, active, all или all_except_active"
         });
       }
 
@@ -61,7 +70,23 @@ function registerBroadcastAPI(app) {
         });
       }
 
-      // Формируем клавиатуру (если нужна кнопка Web App)
+      let photos = [];
+      if (hasPhotos) {
+        for (let i = 0; i < photosBase64.length; i++) {
+          const b64 = photosBase64[i];
+          const data = typeof b64 === "string" ? b64.replace(/^data:image\/\w+;base64,/, "") : b64;
+          try {
+            photos.push(Buffer.from(data, "base64"));
+          } catch (e) {
+            return res.status(400).json({
+              ok: false,
+              error: "INVALID_PHOTO",
+              message: `Неверные данные картинки #${i + 1}`
+            });
+          }
+        }
+      }
+
       let keyboard = null;
       if (hasWebAppButton) {
         keyboard = Markup.inlineKeyboard([
@@ -69,13 +94,13 @@ function registerBroadcastAPI(app) {
         ]).reply_markup;
       }
 
-      // Запускаем рассылку
       const results = await broadcastMessage({
         type,
-        message,
+        message: (message || "").trim(),
         telegramId,
         parseMode: parseMode || "HTML",
-        keyboard
+        keyboard: keyboard ? { reply_markup: keyboard } : undefined,
+        photos
       });
 
       res.json({
@@ -84,7 +109,7 @@ function registerBroadcastAPI(app) {
           total: results.total,
           sent: results.sent,
           failed: results.failed,
-          errors: results.errors.slice(0, 10) // Первые 10 ошибок
+          errors: results.errors.slice(0, 10)
         }
       });
     } catch (error) {

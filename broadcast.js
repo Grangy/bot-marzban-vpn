@@ -11,6 +11,35 @@ function initBroadcast(bot) {
 }
 
 /**
+ * Отправка фото/медиа-группы или текста пользователю
+ */
+async function sendContent(chatId, message, options = {}) {
+  const { photos = [], parseMode = "HTML", keyboard } = options;
+  const extra = {
+    parse_mode: parseMode,
+    caption: (message || "").trim() || undefined,
+    ...(keyboard || {})
+  };
+
+  if (photos.length === 1) {
+    await botInstance.telegram.sendPhoto(chatId, { source: photos[0] }, extra);
+  } else if (photos.length > 1) {
+    const media = photos.map((buf, i) => ({
+      type: "photo",
+      media: { source: buf },
+      caption: i === 0 ? ((message || "").trim() || undefined) : undefined,
+      parse_mode: i === 0 ? parseMode : undefined
+    }));
+    await botInstance.telegram.sendMediaGroup(chatId, media);
+    if (keyboard?.reply_markup) {
+      await botInstance.telegram.sendMessage(chatId, "📱", { reply_markup: keyboard.reply_markup });
+    }
+  } else {
+    await botInstance.telegram.sendMessage(chatId, message, extra);
+  }
+}
+
+/**
  * Отправка сообщения конкретному пользователю
  */
 async function sendToUser(telegramId, message, options = {}) {
@@ -34,9 +63,10 @@ async function sendToUser(telegramId, message, options = {}) {
   }
 
   try {
-    await botInstance.telegram.sendMessage(user.chatId, message, {
-      parse_mode: options.parseMode || "HTML",
-      ...options.keyboard
+    await sendContent(user.chatId, message, {
+      photos: options.photos,
+      parseMode: options.parseMode || "HTML",
+      keyboard: options.keyboard
     });
 
     return {
@@ -64,7 +94,6 @@ async function broadcastToActiveUsers(message, options = {}) {
 
   const now = new Date();
 
-  // Находим активные подписки
   const activeSubscriptions = await prisma.subscription.findMany({
     where: {
       endDate: { gt: now },
@@ -82,11 +111,10 @@ async function broadcastToActiveUsers(message, options = {}) {
     }
   });
 
-  // Уникальные пользователи
   const uniqueUsers = new Map();
   for (const sub of activeSubscriptions) {
     const user = sub.user;
-    if (user.chatId && user.chatId === String(user.telegramId)) { // Только ЛС
+    if (user.chatId && user.chatId === String(user.telegramId)) {
       uniqueUsers.set(user.id, user);
     }
   }
@@ -101,9 +129,10 @@ async function broadcastToActiveUsers(message, options = {}) {
 
   for (const user of users) {
     try {
-      await botInstance.telegram.sendMessage(user.chatId, message, {
-        parse_mode: options.parseMode || "HTML",
-        ...options.keyboard
+      await sendContent(user.chatId, message, {
+        photos: options.photos,
+        parseMode: options.parseMode || "HTML",
+        keyboard: options.keyboard
       });
 
       results.sent++;
@@ -135,21 +164,7 @@ async function broadcastToAllUsers(message, options = {}) {
     throw new Error("Bot instance not initialized");
   }
 
-  // Находим всех пользователей из ЛС
-  const users = await prisma.user.findMany({
-    where: {
-      chatId: { not: "" }
-    },
-    select: {
-      id: true,
-      chatId: true,
-      telegramId: true,
-      accountName: true
-    }
-  });
-
-  // Фильтруем только ЛС (chatId === telegramId)
-  const privateChatUsers = users.filter(u => u.chatId === String(u.telegramId));
+  const privateChatUsers = await getPrivateChatUsers();
 
   const results = {
     total: privateChatUsers.length,
@@ -160,9 +175,10 @@ async function broadcastToAllUsers(message, options = {}) {
 
   for (const user of privateChatUsers) {
     try {
-      await botInstance.telegram.sendMessage(user.chatId, message, {
-        parse_mode: options.parseMode || "HTML",
-        ...options.keyboard
+      await sendContent(user.chatId, message, {
+        photos: options.photos,
+        parseMode: options.parseMode || "HTML",
+        keyboard: options.keyboard
       });
 
       results.sent++;
@@ -187,15 +203,72 @@ async function broadcastToAllUsers(message, options = {}) {
 }
 
 /**
+ * Все пользователи из ЛС (chatId === telegramId)
+ */
+async function getPrivateChatUsers() {
+  const users = await prisma.user.findMany({
+    where: { chatId: { not: "" } },
+    select: { id: true, chatId: true, telegramId: true, accountName: true }
+  });
+  return users.filter(u => u.chatId === String(u.telegramId));
+}
+
+/**
+ * Рассылка всем, кроме активных (ЛС без активной подписки)
+ */
+async function broadcastToAllExceptActive(message, options = {}) {
+  if (!botInstance) {
+    throw new Error("Bot instance not initialized");
+  }
+
+  const now = new Date();
+  const allPrivate = await getPrivateChatUsers();
+
+  const activeSubs = await prisma.subscription.findMany({
+    where: {
+      endDate: { gt: now },
+      type: { not: "FREE" }
+    },
+    include: { user: { select: { id: true } } }
+  });
+  const activeUserIds = new Set(activeSubs.map(s => s.user.id));
+  const users = allPrivate.filter(u => !activeUserIds.has(u.id));
+
+  const results = { total: users.length, sent: 0, failed: 0, errors: [] };
+
+  for (const user of users) {
+    try {
+      await sendContent(user.chatId, message, {
+        photos: options.photos,
+        parseMode: options.parseMode || "HTML",
+        keyboard: options.keyboard
+      });
+      results.sent++;
+    } catch (error) {
+      results.failed++;
+      results.errors.push({
+        telegramId: user.telegramId,
+        error: error.response?.errorCode || "UNKNOWN",
+        message: error.message
+      });
+    }
+    await new Promise(r => setTimeout(r, options.delay || 50));
+  }
+
+  return results;
+}
+
+/**
  * Основная функция рассылки
  */
 async function broadcastMessage(params) {
-  const { type, message, telegramId, parseMode = "HTML", keyboard } = params;
+  const { type, message, telegramId, parseMode = "HTML", keyboard, photos } = params;
 
   const options = {
     parseMode,
-    keyboard: keyboard ? { reply_markup: keyboard } : undefined,
-    delay: 50 // 50мс между сообщениями
+    keyboard: keyboard || undefined,
+    photos: photos || [],
+    delay: 50
   };
 
   let results;
@@ -205,7 +278,7 @@ async function broadcastMessage(params) {
       if (!telegramId) {
         throw new Error("telegramId обязателен для одиночной рассылки");
       }
-      const result = await sendToUser(telegramId, message, options);
+      const result = await sendToUser(telegramId, message || "", options);
       results = {
         total: 1,
         sent: result.success ? 1 : 0,
@@ -220,6 +293,10 @@ async function broadcastMessage(params) {
 
     case "all":
       results = await broadcastToAllUsers(message, options);
+      break;
+
+    case "all_except_active":
+      results = await broadcastToAllExceptActive(message, options);
       break;
 
     default:

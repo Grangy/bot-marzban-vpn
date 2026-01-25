@@ -1,941 +1,503 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MaxGroot - Панель рассылок</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            overflow: hidden;
-        }
-
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }
-
-        .header h1 {
-            font-size: 28px;
-            margin-bottom: 10px;
-        }
-
-        .header p {
-            opacity: 0.9;
-            font-size: 14px;
-        }
-
-        .content {
-            padding: 30px;
-        }
-
-        .form-group {
-            margin-bottom: 25px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #333;
-            font-size: 14px;
-        }
-
-        .radio-group {
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-        }
-
-        .radio-option {
-            flex: 1;
-            min-width: 200px;
-        }
-
-        .radio-option input[type="radio"] {
-            margin-right: 8px;
-        }
-
-        .radio-option label {
-            display: flex;
-            align-items: center;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s;
-            font-weight: 500;
-        }
-
-        .radio-option input[type="radio"]:checked + label {
-            border-color: #667eea;
-            background: #f0f4ff;
-            color: #667eea;
-        }
-
-        input[type="text"],
-        textarea {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 14px;
-            font-family: inherit;
-            transition: border-color 0.3s;
-        }
-
-        input[type="text"]:focus,
-        textarea:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        textarea {
-            min-height: 300px;
-            resize: vertical;
-            font-family: 'Courier New', monospace;
-        }
-
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 12px;
-            background: #f8f9fa;
-            border-radius: 8px;
-        }
-
-        .checkbox-group input[type="checkbox"] {
-            width: 20px;
-            height: 20px;
-            cursor: pointer;
-        }
-
-        .preview {
-            margin-top: 15px;
-            padding: 15px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            border-left: 4px solid #667eea;
-            font-size: 14px;
-            line-height: 1.6;
-            white-space: pre-wrap;
-        }
-
-        .button-group {
-            display: flex;
-            gap: 15px;
-            margin-top: 30px;
-        }
-
-        button {
-            flex: 1;
-            padding: 15px 30px;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-primary:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .btn-secondary {
-            background: #f0f0f0;
-            color: #333;
-        }
-
-        .btn-secondary:hover {
-            background: #e0e0e0;
-        }
-
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 25px;
-        }
-
-        .stat-card {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            text-align: center;
-        }
-
-        .stat-card h3 {
-            font-size: 32px;
-            color: #667eea;
-            margin-bottom: 5px;
-        }
-
-        .stat-card p {
-            color: #666;
-            font-size: 14px;
-        }
-
-        .results {
-            margin-top: 30px;
-            padding: 20px;
-            border-radius: 8px;
-            display: none;
-        }
-
-        .results.success {
-            background: #d4edda;
-            border: 2px solid #28a745;
-            display: block;
-        }
-
-        .results.error {
-            background: #f8d7da;
-            border: 2px solid #dc3545;
-            display: block;
-        }
-
-        .results h3 {
-            margin-bottom: 15px;
-            font-size: 18px;
-        }
-
-        .results ul {
-            list-style: none;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-
-        .results li {
-            padding: 8px;
-            margin-bottom: 5px;
-            background: white;
-            border-radius: 4px;
-            font-size: 13px;
-        }
-
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 20px;
-        }
-
-        .loading.active {
-            display: block;
-        }
-
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .help-text {
-            font-size: 12px;
-            color: #666;
-            margin-top: 5px;
-        }
-
-        .emoji-picker {
-            display: inline-block;
-            margin-left: 10px;
-            padding: 5px 10px;
-            background: #f0f0f0;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-        }
-
-        .format-help {
-            margin-top: 10px;
-            padding: 10px;
-            background: #e3f2fd;
-            border-radius: 6px;
-            font-size: 12px;
-            color: #1976d2;
-        }
-
-        .format-help code {
-            background: rgba(255, 255, 255, 0.7);
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: monospace;
-        }
-
-        .header button {
-            margin-top: 10px;
-            padding: 8px 16px;
-            background: rgba(255, 255, 255, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 6px;
-            color: white;
-            cursor: pointer;
-            font-size: 13px;
-            transition: all 0.3s;
-        }
-
-        .header button:hover {
-            background: rgba(255, 255, 255, 0.3);
-            border-color: rgba(255, 255, 255, 0.5);
-        }
-
-        /* Модальное окно для ввода ключа */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(5px);
-            z-index: 10000;
-            align-items: center;
-            justify-content: center;
-            animation: fadeIn 0.3s ease;
-        }
-
-        .modal-overlay.active {
-            display: flex;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        @keyframes slideUp {
-            from {
-                transform: translateY(30px);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
-        }
-
-        .modal {
-            background: white;
-            border-radius: 16px;
-            padding: 0;
-            max-width: 500px;
-            width: 90%;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-            animation: slideUp 0.3s ease;
-            overflow: hidden;
-        }
-
-        .modal-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 25px 30px;
-            text-align: center;
-        }
-
-        .modal-header h2 {
-            margin: 0;
-            font-size: 24px;
-            font-weight: 600;
-        }
-
-        .modal-header p {
-            margin: 8px 0 0 0;
-            opacity: 0.9;
-            font-size: 14px;
-        }
-
-        .modal-body {
-            padding: 30px;
-        }
-
-        .modal-body label {
-            display: block;
-            margin-bottom: 10px;
-            font-weight: 600;
-            color: #333;
-            font-size: 14px;
-        }
-
-        .modal-body input {
-            width: 100%;
-            padding: 14px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 15px;
-            font-family: 'Courier New', monospace;
-            transition: border-color 0.3s;
-            box-sizing: border-box;
-        }
-
-        .modal-body input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .modal-body .help-text {
-            margin-top: 8px;
-            font-size: 12px;
-            color: #666;
-        }
-
-        .modal-footer {
-            padding: 20px 30px;
-            background: #f8f9fa;
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-        }
-
-        .modal-footer button {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 8px;
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .modal-btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .modal-btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-
-        .modal-btn-primary:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .modal-btn-secondary {
-            background: #e0e0e0;
-            color: #333;
-        }
-
-        .modal-btn-secondary:hover {
-            background: #d0d0d0;
-        }
-
-        .error-message {
-            margin-top: 10px;
-            padding: 10px;
-            background: #fee;
-            border: 1px solid #fcc;
-            border-radius: 6px;
-            color: #c33;
-            font-size: 13px;
-            display: none;
-        }
-
-        .error-message.show {
-            display: block;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MaxGroot — Панель рассылок</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: {} }
+    }
+  </script>
+  <style>
+    .toast { animation: toastIn 0.3s ease, toastOut 0.3s ease 2.7s forwards; }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes toastOut { to { opacity: 0; transform: translateY(-10px); } }
+    .drag-over { background: rgb(99 102 241 / 0.15); border-color: rgb(99 102 241); }
+    .thumb-remove { opacity: 0; transition: opacity 0.2s; }
+    .thumb-wrap:hover .thumb-remove { opacity: 1; }
+  </style>
 </head>
-<body>
-    <!-- Модальное окно для ввода ключа -->
-    <div class="modal-overlay" id="keyModal">
-        <div class="modal">
-            <div class="modal-header">
-                <h2>🔐 Авторизация</h2>
-                <p>Введите секретный ключ для доступа к панели рассылок</p>
-            </div>
-            <div class="modal-body">
-                <label for="keyInput">Секретный ключ *</label>
-                <input 
-                    type="password" 
-                    id="keyInput" 
-                    placeholder="Введите секретный ключ"
-                    autocomplete="off"
-                    autofocus
-                    onkeypress="if(event.key === 'Enter') document.getElementById('submitKeyBtn').click()"
-                >
-                <div class="help-text">Ключ будет сохранен в браузере для последующих посещений</div>
-                <div class="error-message" id="keyError"></div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="modal-btn-secondary" onclick="closeKeyModal()">Отмена</button>
-                <button type="button" class="modal-btn-primary" id="submitKeyBtn" onclick="submitKey()">Войти</button>
-            </div>
-        </div>
+<body class="bg-gradient-to-br from-indigo-500 via-purple-600 to-violet-700 min-h-screen p-4 md:p-6 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-colors">
+  <!-- Toast container -->
+  <div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2 max-w-sm"></div>
+
+  <!-- Key modal -->
+  <div id="keyModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+      <div class="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-8 text-center text-white">
+        <h2 class="text-2xl font-bold">🔐 Авторизация</h2>
+        <p class="mt-2 text-sm opacity-90">Введите секретный ключ для доступа к панели рассылок</p>
+      </div>
+      <div class="p-6">
+        <label for="keyInput" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Секретный ключ *</label>
+        <input type="password" id="keyInput" placeholder="Введите секретный ключ" autocomplete="off"
+          class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 outline-none transition"
+          onkeydown="if(event.key==='Enter')document.getElementById('submitKeyBtn').click()">
+        <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Ключ сохраняется в браузере</p>
+        <div id="keyError" class="mt-2 hidden text-sm text-red-600 dark:text-red-400"></div>
+      </div>
+      <div class="flex gap-3 justify-end px-6 py-4 bg-gray-50 dark:bg-gray-700/50">
+        <button type="button" onclick="closeKeyModal()" class="px-5 py-2.5 rounded-lg font-medium bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500 transition">Отмена</button>
+        <button type="button" id="submitKeyBtn" onclick="submitKey()" class="px-5 py-2.5 rounded-lg font-semibold bg-indigo-500 text-white hover:bg-indigo-600 transition shadow-lg shadow-indigo-500/30">Войти</button>
+      </div>
     </div>
+  </div>
 
-    <div class="container" id="mainContainer" style="display: none;">
-        <div class="header">
-            <h1>📢 Панель рассылок MaxGroot</h1>
-            <p>Управление рассылкой сообщений пользователям бота</p>
-            <button onclick="resetAdminSecret()">Сбросить ключ</button>
+  <!-- Main panel -->
+  <div id="mainContainer" class="max-w-4xl mx-auto hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden">
+      <div class="bg-gradient-to-r from-indigo-500 via-purple-600 to-violet-600 px-6 py-8 text-center text-white">
+        <div class="flex flex-wrap items-center justify-center gap-4">
+          <h1 class="text-2xl md:text-3xl font-bold">📢 Панель рассылок MaxGroot</h1>
+          <div class="flex gap-2">
+            <button type="button" onclick="toggleDark()" class="p-2 rounded-lg bg-white/20 hover:bg-white/30 transition" title="Тёмная тема">🌙</button>
+            <button type="button" onclick="resetAdminSecret()" class="px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-sm transition">Сбросить ключ</button>
+          </div>
+        </div>
+        <p class="mt-2 text-sm opacity-90">Управление рассылкой сообщений пользователям бота</p>
+      </div>
+
+      <div class="p-6 md:p-8">
+        <!-- Stats -->
+        <div id="stats" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div class="rounded-xl bg-gray-50 dark:bg-gray-700/50 p-5 text-center">
+            <div id="totalUsers" class="text-2xl md:text-3xl font-bold text-indigo-600 dark:text-indigo-400">–</div>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Всего пользователей</p>
+          </div>
+          <div class="rounded-xl bg-gray-50 dark:bg-gray-700/50 p-5 text-center">
+            <div id="activeUsers" class="text-2xl md:text-3xl font-bold text-emerald-600 dark:text-emerald-400">–</div>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">Активных</p>
+          </div>
+          <div class="col-span-2 flex items-center gap-2">
+            <button type="button" onclick="copyStats()" class="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-sm font-medium transition">📋 Копировать статистику</button>
+          </div>
         </div>
 
-        <div class="content">
-            <!-- Статистика -->
-            <div class="stats" id="stats">
-                <div class="stat-card">
-                    <h3 id="totalUsers">-</h3>
-                    <p>Всего пользователей</p>
-                </div>
-                <div class="stat-card">
-                    <h3 id="activeUsers">-</h3>
-                    <p>Активных пользователей</p>
-                </div>
+        <form id="broadcastForm" class="space-y-6">
+          <!-- Type -->
+          <div>
+            <label for="broadcastType" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Тип рассылки *</label>
+            <select id="broadcastType" name="type"
+              class="w-full max-w-md px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-indigo-500 outline-none transition appearance-none bg-[length:1.5rem] bg-[right_0.5rem_center] bg-no-repeat pr-12"
+              style="background-image: url(&quot;data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3e%3c/svg%3e&quot;);">
+              <option value="single">📱 Конкретный пользователь</option>
+              <option value="active" selected>✅ Активные подписки</option>
+              <option value="all">🌍 Все пользователи</option>
+              <option value="all_except_active">📭 Все, кроме активных</option>
+            </select>
+          </div>
+
+          <!-- Telegram ID (single) -->
+          <div id="telegramIdGroup" class="hidden">
+            <label for="telegramId" class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Telegram ID *</label>
+            <input type="text" id="telegramId" name="telegramId" placeholder="Например: 683203214"
+              class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-indigo-500 outline-none transition">
+          </div>
+
+          <!-- Images: drag-n-drop -->
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">🖼️ Картинки (опционально)</label>
+            <div id="dropZone" class="rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 p-8 text-center transition bg-gray-50/50 dark:bg-gray-700/30 cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-500">
+              <p class="text-gray-500 dark:text-gray-400">Перетащите сюда изображения или <span class="text-indigo-600 dark:text-indigo-400 font-medium">выберите файлы</span></p>
+              <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">Поддерживается несколько файлов (JPEG, PNG, WebP)</p>
+              <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp" multiple class="hidden">
             </div>
+            <div id="thumbnails" class="mt-4 flex flex-wrap gap-3"></div>
+          </div>
 
-            <!-- Форма рассылки -->
-            <form id="broadcastForm">
-                <div class="form-group">
-                    <label>Тип рассылки *</label>
-                    <div class="radio-group">
-                        <div class="radio-option">
-                            <input type="radio" id="type-single" name="type" value="single">
-                            <label for="type-single">📱 Конкретный пользователь</label>
-                        </div>
-                        <div class="radio-option">
-                            <input type="radio" id="type-active" name="type" value="active" checked>
-                            <label for="type-active">✅ Активные подписки</label>
-                        </div>
-                        <div class="radio-option">
-                            <input type="radio" id="type-all" name="type" value="all">
-                            <label for="type-all">🌍 Все пользователи</label>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="form-group" id="telegramIdGroup" style="display: none;">
-                    <label for="telegramId">Telegram ID пользователя *</label>
-                    <input type="text" id="telegramId" name="telegramId" placeholder="Например: 683203214">
-                    <div class="help-text">Введите Telegram ID пользователя (число)</div>
-                </div>
-
-                <div class="form-group">
-                    <label for="message">Текст сообщения *</label>
-                    <textarea id="message" name="message" required placeholder="Введите текст сообщения..."></textarea>
-                    <div class="help-text">
-                        Поддерживается HTML форматирование: <code>&lt;b&gt;жирный&lt;/b&gt;</code>, 
-                        <code>&lt;i&gt;курсив&lt;/i&gt;</code>, <code>&lt;code&gt;код&lt;/code&gt;</code>, 
-                        <code>&lt;a href="..."&gt;ссылка&lt;/a&gt;</code>
-                    </div>
-                    <div class="format-help">
-                        💡 Эмодзи можно вставлять напрямую или использовать HTML entities. 
-                        Пример: 🚀 ✅ 💙 или <code>&amp;#128640;</code>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="hasWebAppButton" name="hasWebAppButton">
-                        <label for="hasWebAppButton" style="margin: 0; cursor: pointer;">
-                            Добавить кнопку "📱 Открыть приложение"
-                        </label>
-                    </div>
-                </div>
-
-                <div class="button-group">
-                    <button type="button" class="btn-secondary" onclick="previewMessage()">👁️ Предпросмотр</button>
-                    <button type="submit" class="btn-primary" id="sendBtn">📤 Отправить</button>
-                </div>
-            </form>
-
-            <!-- Предпросмотр -->
-            <div id="preview" class="preview" style="display: none;"></div>
-
-            <!-- Загрузка -->
-            <div class="loading" id="loading">
-                <div class="spinner"></div>
-                <p>Отправка сообщений...</p>
+          <!-- Message -->
+          <div>
+            <div class="flex justify-between items-center mb-2">
+              <label for="message" class="block text-sm font-semibold text-gray-700 dark:text-gray-300">Текст сообщения *</label>
+              <span id="charCount" class="text-xs text-gray-500 dark:text-gray-400">0</span>
             </div>
-
-            <!-- Результаты -->
-            <div class="results" id="results">
-                <h3 id="resultsTitle"></h3>
-                <div id="resultsContent"></div>
+            <textarea id="message" name="message" rows="8" placeholder="Введите текст… Поддерживается HTML: &lt;b&gt;, &lt;i&gt;, &lt;code&gt;, &lt;a href=&quot;…&quot;&gt;"
+              class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:border-indigo-500 outline-none transition resize-y font-mono text-sm"></textarea>
+            <div class="mt-2 flex flex-wrap gap-2">
+              <button type="button" onclick="insertFormat('b')" class="px-2 py-1 rounded bg-gray-200 dark:bg-gray-600 text-xs font-medium hover:bg-gray-300 dark:hover:bg-gray-500">жирный</button>
+              <button type="button" onclick="insertFormat('i')" class="px-2 py-1 rounded bg-gray-200 dark:bg-gray-600 text-xs font-medium hover:bg-gray-300 dark:hover:bg-gray-500">курсив</button>
+              <button type="button" onclick="insertFormat('code')" class="px-2 py-1 rounded bg-gray-200 dark:bg-gray-600 text-xs font-medium hover:bg-gray-300 dark:hover:bg-gray-500">код</button>
+              <button type="button" onclick="insertEmoji('🚀')" class="px-2 py-1 rounded bg-gray-200 dark:bg-gray-600 text-xs hover:bg-gray-300 dark:hover:bg-gray-500">🚀</button>
+              <button type="button" onclick="insertEmoji('✅')" class="px-2 py-1 rounded bg-gray-200 dark:bg-gray-600 text-xs hover:bg-gray-300 dark:hover:bg-gray-500">✅</button>
+              <button type="button" onclick="insertEmoji('💙')" class="px-2 py-1 rounded bg-gray-200 dark:bg-gray-600 text-xs hover:bg-gray-300 dark:hover:bg-gray-500">💙</button>
             </div>
+          </div>
+
+          <!-- WebApp button -->
+          <label class="flex items-center gap-3 p-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 cursor-pointer">
+            <input type="checkbox" id="hasWebAppButton" name="hasWebAppButton" class="w-5 h-5 rounded">
+            <span class="text-gray-700 dark:text-gray-300">Добавить кнопку «📱 Открыть приложение»</span>
+          </label>
+
+          <!-- Actions -->
+          <div class="flex flex-wrap gap-3 pt-2">
+            <button type="button" onclick="previewMessage()" class="px-6 py-3 rounded-xl font-semibold bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500 transition">👁️ Предпросмотр</button>
+            <button type="submit" id="sendBtn" class="px-6 py-3 rounded-xl font-semibold bg-indigo-500 text-white hover:bg-indigo-600 transition shadow-lg shadow-indigo-500/30 disabled:opacity-50 disabled:cursor-not-allowed">📤 Отправить</button>
+          </div>
+        </form>
+
+        <!-- Preview -->
+        <div id="preview" class="mt-8 p-6 rounded-xl bg-gray-100 dark:bg-gray-700/50 border-l-4 border-indigo-500 hidden"></div>
+
+        <!-- Loading -->
+        <div id="loading" class="mt-8 hidden text-center">
+          <div class="inline-block w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+          <p class="mt-3 text-gray-600 dark:text-gray-400">Отправка сообщений…</p>
         </div>
+
+        <!-- Results -->
+        <div id="results" class="mt-8 p-6 rounded-xl hidden">
+          <h3 id="resultsTitle" class="text-lg font-bold mb-4"></h3>
+          <div id="resultsContent"></div>
+        </div>
+      </div>
     </div>
+  </div>
 
-    <script>
-        const API_URL = window.location.origin;
-        const STORAGE_KEY = 'maxgroot_broadcast_admin_secret';
-        let ADMIN_SECRET = null;
+  <script>
+    const API_URL = window.location.origin;
+    const STORAGE_KEY = 'maxgroot_broadcast_admin_secret';
+    const DRAFT_KEY = 'maxgroot_broadcast_draft';
+    let ADMIN_SECRET = null;
+    let selectedFiles = [];
 
-        // Показываем модальное окно для ввода ключа
-        function showKeyModal() {
-            const modal = document.getElementById('keyModal');
-            const keyInput = document.getElementById('keyInput');
-            const errorMsg = document.getElementById('keyError');
-            
-            modal.classList.add('active');
-            keyInput.value = '';
-            errorMsg.classList.remove('show');
-            errorMsg.textContent = '';
-            
-            // Фокус на поле ввода
-            setTimeout(() => keyInput.focus(), 100);
-        }
+    function toast(msg, type = 'info') {
+      const el = document.createElement('div');
+      el.className = `toast px-4 py-3 rounded-xl shadow-lg ${type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-emerald-500' : 'bg-gray-800 dark:bg-gray-700'} text-white text-sm`;
+      el.textContent = msg;
+      document.getElementById('toastContainer').appendChild(el);
+      setTimeout(() => el.remove(), 3000);
+    }
 
-        // Скрываем модальное окно
-        function closeKeyModal() {
-            const modal = document.getElementById('keyModal');
-            modal.classList.remove('active');
-            
-            // Если ключ не введен, скрываем основное содержимое
-            if (!ADMIN_SECRET) {
-                document.getElementById('mainContainer').style.display = 'none';
-            }
-        }
+    function showKeyModal() {
+      document.getElementById('keyModal').classList.remove('hidden');
+      const inp = document.getElementById('keyInput');
+      inp.value = '';
+      inp.focus();
+      const errEl = document.getElementById('keyError');
+      errEl.classList.add('hidden');
+      errEl.textContent = '';
+    }
 
-        // Отправка ключа
-        function submitKey() {
-            const keyInput = document.getElementById('keyInput');
-            const errorMsg = document.getElementById('keyError');
-            const submitBtn = document.getElementById('submitKeyBtn');
-            
-            const secret = keyInput.value.trim();
-            
-            if (!secret) {
-                errorMsg.textContent = '⚠️ Секретный ключ обязателен!';
-                errorMsg.classList.add('show');
-                keyInput.focus();
-                return;
-            }
+    function closeKeyModal() {
+      document.getElementById('keyModal').classList.add('hidden');
+      if (!ADMIN_SECRET) document.getElementById('mainContainer').classList.add('hidden');
+    }
 
-            // Сохраняем ключ
-            ADMIN_SECRET = secret;
-            localStorage.setItem(STORAGE_KEY, secret);
-            
-            // Скрываем модальное окно
-            closeKeyModal();
-            
-            // Показываем основное содержимое
-            document.getElementById('mainContainer').style.display = 'block';
-            
-            // Загружаем статистику
-            loadStats();
-        }
+    function submitKey() {
+      const secret = document.getElementById('keyInput').value.trim();
+      const errEl = document.getElementById('keyError');
+      if (!secret) {
+        errEl.textContent = '⚠️ Введите секретный ключ';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      ADMIN_SECRET = secret;
+      localStorage.setItem(STORAGE_KEY, secret);
+      closeKeyModal();
+      document.getElementById('mainContainer').classList.remove('hidden');
+      loadStats();
+      toast('Ключ сохранён', 'success');
+    }
 
-        // Функция для сброса ключа
-        function resetAdminSecret() {
-            if (confirm('Вы уверены, что хотите сбросить ключ? Потребуется повторный ввод.')) {
-                localStorage.removeItem(STORAGE_KEY);
-                ADMIN_SECRET = null;
-                document.getElementById('mainContainer').style.display = 'none';
-                showKeyModal();
-            }
-        }
+    function resetAdminSecret() {
+      if (!confirm('Сбросить ключ? Потребуется повторный ввод.')) return;
+      localStorage.removeItem(STORAGE_KEY);
+      ADMIN_SECRET = null;
+      document.getElementById('mainContainer').classList.add('hidden');
+      showKeyModal();
+      toast('Ключ сброшен');
+    }
 
-        // Закрытие по Escape
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                const modal = document.getElementById('keyModal');
-                if (modal.classList.contains('active') && ADMIN_SECRET) {
-                    closeKeyModal();
-                }
-            }
-        });
+    function toggleDark() {
+      document.documentElement.classList.toggle('dark');
+      localStorage.setItem('maxgroot_broadcast_dark', document.documentElement.classList.contains('dark'));
+      toast(document.documentElement.classList.contains('dark') ? 'Тёмная тема' : 'Светлая тема');
+    }
 
-        // Закрытие по клику на overlay (но не на сам modal)
-        document.getElementById('keyModal').addEventListener('click', function(e) {
-            if (e.target === this && ADMIN_SECRET) {
-                closeKeyModal();
-            }
-        });
+    if (localStorage.getItem('maxgroot_broadcast_dark') === 'true') document.documentElement.classList.add('dark');
 
-        // Инициализация при загрузке страницы
-        function init() {
-            // Проверяем localStorage
-            const savedSecret = localStorage.getItem(STORAGE_KEY);
-            
-            if (savedSecret) {
-                ADMIN_SECRET = savedSecret;
-                document.getElementById('mainContainer').style.display = 'block';
-                loadStats();
-            } else {
-                // Показываем модальное окно
-                showKeyModal();
-            }
-        }
+    document.getElementById('keyModal').addEventListener('click', e => { if (e.target.id === 'keyModal') closeKeyModal(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !document.getElementById('keyModal').classList.contains('hidden')) closeKeyModal(); });
 
-        // Запускаем инициализацию после загрузки DOM
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', init);
-        } else {
-            init();
-        }
-
-        // Загрузка статистики
-        async function loadStats() {
-            try {
-                const response = await fetch(`${API_URL}/admin/broadcast/stats`, {
-                    headers: {
-                        'X-Admin-Secret': ADMIN_SECRET
-                    }
-                });
-                const data = await response.json();
-                
-                if (data.ok && data.stats) {
-                    const totalUsersEl = document.getElementById('totalUsers');
-                    const activeUsersEl = document.getElementById('activeUsers');
-                    
-                    // Безопасная установка значений
-                    if (totalUsersEl) {
-                        totalUsersEl.textContent = data.stats.totalUsers || 0;
-                    }
-                    if (activeUsersEl) {
-                        activeUsersEl.textContent = data.stats.activeUsers || 0;
-                    }
-                }
-            } catch (error) {
-                console.error('Ошибка загрузки статистики:', error);
-                // Если ошибка авторизации - сбрасываем ключ и показываем модальное окно
-                if (error.message.includes('401') || error.message.includes('UNAUTHORIZED')) {
-                    console.warn('Неверный ключ. Очищаем localStorage...');
-                    localStorage.removeItem(STORAGE_KEY);
-                    ADMIN_SECRET = null;
-                    document.getElementById('mainContainer').style.display = 'none';
-                    showKeyModal();
-                    const errorMsg = document.getElementById('keyError');
-                    errorMsg.textContent = '❌ Неверный секретный ключ! Пожалуйста, введите правильный ключ.';
-                    errorMsg.classList.add('show');
-                }
-            }
-        }
-
-        // Показать/скрыть поле Telegram ID
-        document.querySelectorAll('input[name="type"]').forEach(radio => {
-            radio.addEventListener('change', function() {
-                const telegramIdGroup = document.getElementById('telegramIdGroup');
-                telegramIdGroup.style.display = this.value === 'single' ? 'block' : 'none';
-                
-                if (this.value === 'single') {
-                    document.getElementById('telegramId').required = true;
-                } else {
-                    document.getElementById('telegramId').required = false;
-                }
-            });
-        });
-
-        // Предпросмотр сообщения
-        function previewMessage() {
-            const message = document.getElementById('message').value;
-            const preview = document.getElementById('preview');
-            
-            if (message) {
-                preview.innerHTML = message.replace(/\n/g, '<br>');
-                preview.style.display = 'block';
-            } else {
-                preview.style.display = 'none';
-            }
-        }
-
-        // Отправка формы
-        document.getElementById('broadcastForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-
-            const formData = {
-                type: document.querySelector('input[name="type"]:checked').value,
-                message: document.getElementById('message').value,
-                telegramId: document.getElementById('telegramId').value,
-                parseMode: 'HTML',
-                hasWebAppButton: document.getElementById('hasWebAppButton').checked
-            };
-
-            if (formData.type === 'single' && !formData.telegramId) {
-                alert('Введите Telegram ID пользователя!');
-                return;
-            }
-
-            if (!formData.message.trim()) {
-                alert('Введите текст сообщения!');
-                return;
-            }
-
-            // Подтверждение
-            const typeNames = {
-                single: 'конкретному пользователю',
-                active: 'активным пользователям',
-                all: 'всем пользователям'
-            };
-
-            const confirmMessage = `Вы уверены, что хотите отправить сообщение ${typeNames[formData.type]}?\n\n` +
-                `Текст сообщения:\n${formData.message.substring(0, 100)}${formData.message.length > 100 ? '...' : ''}`;
-
-            if (!confirm(confirmMessage)) {
-                return;
-            }
-
-            // Показываем загрузку
-            document.getElementById('loading').classList.add('active');
-            document.getElementById('sendBtn').disabled = true;
-            document.getElementById('results').classList.remove('success', 'error');
-            document.getElementById('results').style.display = 'none';
-
-            try {
-                const response = await fetch(`${API_URL}/admin/broadcast/send`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Admin-Secret': ADMIN_SECRET
-                    },
-                    body: JSON.stringify(formData)
-                });
-
-                const data = await response.json();
-
-                document.getElementById('loading').classList.remove('active');
-                document.getElementById('sendBtn').disabled = false;
-
-                if (data.ok) {
-                    const results = data.results;
-                    const resultsDiv = document.getElementById('results');
-                    const resultsTitle = document.getElementById('resultsTitle');
-                    const resultsContent = document.getElementById('resultsContent');
-
-                    if (resultsDiv) {
-                        if (resultsTitle) {
-                            resultsTitle.textContent = `✅ Рассылка завершена`;
-                        }
-                        if (resultsContent) {
-                            resultsContent.innerHTML = `
-                                <p><strong>Всего получателей:</strong> ${results.total}</p>
-                                <p><strong>Успешно отправлено:</strong> ${results.sent}</p>
-                                <p><strong>Ошибок:</strong> ${results.failed}</p>
-                                ${results.errors && results.errors.length > 0 ? `
-                                    <h4>Ошибки (первые 10):</h4>
-                                    <ul>
-                                        ${results.errors.map(e => `<li>ID ${e.telegramId}: ${e.message || e.error}</li>`).join('')}
-                                    </ul>
-                                ` : ''}
-                            `;
-                        } else {
-                            // Если нет resultsContent, устанавливаем напрямую в resultsDiv
-                            resultsDiv.innerHTML = `
-                                <h3>✅ Рассылка завершена</h3>
-                                <p><strong>Всего получателей:</strong> ${results.total}</p>
-                                <p><strong>Успешно отправлено:</strong> ${results.sent}</p>
-                                <p><strong>Ошибок:</strong> ${results.failed}</p>
-                                ${results.errors && results.errors.length > 0 ? `
-                                    <h4>Ошибки (первые 10):</h4>
-                                    <ul>
-                                        ${results.errors.map(e => `<li>ID ${e.telegramId}: ${e.message || e.error}</li>`).join('')}
-                                    </ul>
-                                ` : ''}
-                            `;
-                        }
-
-                        resultsDiv.classList.add('success');
-                        resultsDiv.style.display = 'block';
-                    }
-
-                    // Обновляем статистику
-                    loadStats();
-                } else {
-                    const resultsDiv = document.getElementById('results');
-                    const resultsTitle = document.getElementById('resultsTitle');
-                    const resultsContent = document.getElementById('resultsContent');
-                    
-                    // Проверяем существование элементов
-                    if (resultsDiv && resultsTitle && resultsContent) {
-                        resultsTitle.textContent = '❌ Ошибка';
-                        resultsContent.innerHTML = `<p>${data.message || data.error}</p>`;
-                        resultsDiv.classList.add('error');
-                        resultsDiv.style.display = 'block';
-                    } else if (resultsDiv) {
-                        // Если нет вложенных элементов, устанавливаем напрямую
-                        resultsDiv.innerHTML = `
-                            <h3>❌ Ошибка</h3>
-                            <p>${data.message || data.error}</p>
-                        `;
-                        resultsDiv.classList.add('error');
-                        resultsDiv.style.display = 'block';
-                    }
-                    
-                    // Если ошибка авторизации - сбрасываем ключ и показываем модальное окно
-                    if (data.error === 'UNAUTHORIZED') {
-                        localStorage.removeItem(STORAGE_KEY);
-                        ADMIN_SECRET = null;
-                        document.getElementById('mainContainer').style.display = 'none';
-                        showKeyModal();
-                        const errorMsg = document.getElementById('keyError');
-                        errorMsg.textContent = '❌ Неверный секретный ключ! Пожалуйста, введите правильный ключ.';
-                        errorMsg.classList.add('show');
-                    }
-                }
-            } catch (error) {
-                document.getElementById('loading').classList.remove('active');
-                const sendBtn = document.getElementById('sendBtn');
-                if (sendBtn) sendBtn.disabled = false;
-
-                const resultsDiv = document.getElementById('results');
-                if (resultsDiv) {
-                    resultsDiv.innerHTML = `
-                        <h3>❌ Ошибка соединения</h3>
-                        <p>${error.message}</p>
-                    `;
-                    resultsDiv.classList.add('error');
-                    resultsDiv.style.display = 'block';
-                }
-                
-                // Если ошибка авторизации - сбрасываем ключ и показываем модальное окно
-                if (error.message.includes('401') || error.message.includes('UNAUTHORIZED')) {
-                    localStorage.removeItem(STORAGE_KEY);
-                    ADMIN_SECRET = null;
-                    document.getElementById('mainContainer').style.display = 'none';
-                    showKeyModal();
-                    const errorMsg = document.getElementById('keyError');
-                    errorMsg.textContent = '❌ Неверный секретный ключ! Пожалуйста, введите правильный ключ.';
-                    errorMsg.classList.add('show');
-                }
-            }
-        });
-
-        // Загружаем статистику при загрузке страницы
+    function init() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        ADMIN_SECRET = saved;
+        document.getElementById('mainContainer').classList.remove('hidden');
         loadStats();
-    </script>
+        loadDraft();
+        toggleTelegramIdGroup();
+      } else showKeyModal();
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
+
+    function toggleTelegramIdGroup() {
+      const type = document.getElementById('broadcastType')?.value;
+      const g = document.getElementById('telegramIdGroup');
+      const tid = document.getElementById('telegramId');
+      if (type === 'single') {
+        g?.classList.remove('hidden');
+        if (tid) tid.required = true;
+      } else {
+        g?.classList.add('hidden');
+        if (tid) tid.required = false;
+      }
+    }
+
+    function loadDraft() {
+      try {
+        const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
+        if (d.message) document.getElementById('message').value = d.message;
+        const sel = document.getElementById('broadcastType');
+        if (d.type && sel && ['single','active','all','all_except_active'].includes(d.type)) sel.value = d.type;
+        if (d.telegramId) document.getElementById('telegramId').value = d.telegramId;
+        if (d.hasWebAppButton) document.getElementById('hasWebAppButton').checked = true;
+        toggleTelegramIdGroup();
+        updateCharCount();
+      } catch (_) {}
+    }
+
+    function saveDraft() {
+      const msg = document.getElementById('message').value;
+      const type = document.getElementById('broadcastType')?.value;
+      const tid = document.getElementById('telegramId').value;
+      const web = document.getElementById('hasWebAppButton').checked;
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ message: msg, type, telegramId: tid, hasWebAppButton: web }));
+    }
+
+    document.getElementById('message')?.addEventListener('input', () => { updateCharCount(); saveDraft(); });
+    document.getElementById('message')?.addEventListener('keydown', e => {
+      if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); document.getElementById('broadcastForm').requestSubmit(); }
+    });
+    document.getElementById('broadcastType')?.addEventListener('change', () => { toggleTelegramIdGroup(); saveDraft(); });
+
+    function updateCharCount() {
+      const n = (document.getElementById('message')?.value || '').length;
+      const el = document.getElementById('charCount');
+      if (el) el.textContent = n;
+    }
+
+    function insertFormat(tag) {
+      const ta = document.getElementById('message');
+      const s = ta.selectionStart, e = ta.selectionEnd, t = ta.value;
+      const open = `<${tag}>`, close = `</${tag}>`;
+      ta.value = t.slice(0, s) + open + (s !== e ? t.slice(s, e) : '…') + close + t.slice(e);
+      ta.selectionStart = ta.selectionEnd = s + open.length + (s !== e ? e - s : 1);
+      ta.focus();
+      updateCharCount();
+      saveDraft();
+    }
+
+    function insertEmoji(emoji) {
+      const ta = document.getElementById('message');
+      const s = ta.selectionStart;
+      ta.value = ta.value.slice(0, s) + emoji + ta.value.slice(s);
+      ta.selectionStart = ta.selectionEnd = s + emoji.length;
+      ta.focus();
+      updateCharCount();
+      saveDraft();
+    }
+
+    function copyStats() {
+      const total = document.getElementById('totalUsers')?.textContent ?? '–';
+      const active = document.getElementById('activeUsers')?.textContent ?? '–';
+      const text = `Пользователи: ${total}\nАктивных: ${active}`;
+      navigator.clipboard.writeText(text).then(() => toast('Статистика скопирована', 'success')).catch(() => toast('Не удалось скопировать', 'error'));
+    }
+
+    function previewMessage() {
+      const msg = document.getElementById('message').value;
+      const prev = document.getElementById('preview');
+      if (msg) {
+        prev.innerHTML = msg.replace(/\n/g, '<br>');
+        prev.classList.remove('hidden');
+      } else prev.classList.add('hidden');
+    }
+
+    // ——— Drag-n-drop images ———
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const thumbnails = document.getElementById('thumbnails');
+
+    function addFiles(files) {
+      const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+      for (const f of files) {
+        if (!allowed.includes(f.type) || selectedFiles.some(x => x.name === f.name && x.size === f.size)) continue;
+        selectedFiles.push(f);
+      }
+      renderThumbnails();
+    }
+
+    function removeFile(index) {
+      selectedFiles.splice(index, 1);
+      renderThumbnails();
+    }
+
+    function renderThumbnails() {
+      thumbnails.innerHTML = '';
+      selectedFiles.forEach((f, i) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'thumb-wrap relative inline-block';
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(f);
+        img.className = 'w-20 h-20 object-cover rounded-lg border-2 border-gray-200 dark:border-gray-600';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'thumb-remove absolute -top-1 -right-1 w-6 h-6 rounded-full bg-red-500 text-white text-sm leading-none hover:bg-red-600';
+        btn.textContent = '×';
+        btn.onclick = () => removeFile(i);
+        wrap.appendChild(img);
+        wrap.appendChild(btn);
+        thumbnails.appendChild(wrap);
+      });
+    }
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      addFiles(e.dataTransfer.files);
+    });
+    fileInput.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
+
+    // ——— Form submit ———
+    document.getElementById('broadcastForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const type = document.getElementById('broadcastType')?.value;
+      const message = document.getElementById('message').value.trim();
+      const telegramId = document.getElementById('telegramId').value.trim();
+      const hasWebAppButton = document.getElementById('hasWebAppButton').checked;
+
+      if (type === 'single' && !telegramId) {
+        toast('Введите Telegram ID', 'error');
+        return;
+      }
+      if (!message && selectedFiles.length === 0) {
+        toast('Введите текст и/или приложите картинки', 'error');
+        return;
+      }
+
+      const names = {
+        single: 'конкретному пользователю',
+        active: 'активным подпискам',
+        all: 'всем пользователям',
+        all_except_active: 'всем, кроме активных'
+      };
+      if (!confirm(`Отправить рассылку ${names[type] || type}?`)) return;
+
+      const loading = document.getElementById('loading');
+      const sendBtn = document.getElementById('sendBtn');
+      const results = document.getElementById('results');
+      loading.classList.remove('hidden');
+      sendBtn.disabled = true;
+      results.classList.add('hidden');
+
+      const photosBase64 = await Promise.all(selectedFiles.map(f => {
+        return new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = () => res(r.result);
+          r.onerror = rej;
+          r.readAsDataURL(f);
+        });
+      }));
+
+      const body = {
+        type,
+        message,
+        telegramId: type === 'single' ? telegramId : undefined,
+        parseMode: 'HTML',
+        hasWebAppButton,
+        photos: photosBase64
+      };
+
+      try {
+        const resp = await fetch(`${API_URL}/admin/broadcast/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': ADMIN_SECRET },
+          body: JSON.stringify(body)
+        });
+        const data = await resp.json();
+        loading.classList.add('hidden');
+        sendBtn.disabled = false;
+
+        if (data.ok) {
+          const r = data.results;
+          document.getElementById('resultsTitle').textContent = '✅ Рассылка завершена';
+          document.getElementById('resultsContent').innerHTML = `
+            <p class="mb-2"><strong>Всего:</strong> ${r.total} · <strong>Отправлено:</strong> ${r.sent} · <strong>Ошибок:</strong> ${r.failed}</p>
+            ${(r.errors && r.errors.length) ? `<ul class="list-disc list-inside text-sm text-gray-600 dark:text-gray-400">${r.errors.slice(0, 10).map(e => `<li>ID ${e.telegramId}: ${e.message || e.error}</li>`).join('')}</ul>` : ''}
+          `;
+          results.className = 'mt-8 p-6 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800';
+          results.classList.remove('hidden');
+          results.style.display = 'block';
+          loadStats();
+          toast('Рассылка выполнена', 'success');
+          selectedFiles = [];
+          renderThumbnails();
+          document.getElementById('message').value = '';
+          updateCharCount();
+          saveDraft();
+        } else {
+          document.getElementById('resultsTitle').textContent = '❌ Ошибка';
+          document.getElementById('resultsContent').innerHTML = `<p>${data.message || data.error}</p>`;
+          results.className = 'mt-8 p-6 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800';
+          results.classList.remove('hidden');
+          results.style.display = 'block';
+          toast(data.message || data.error, 'error');
+          if (data.error === 'UNAUTHORIZED') {
+            localStorage.removeItem(STORAGE_KEY);
+            ADMIN_SECRET = null;
+            document.getElementById('mainContainer').classList.add('hidden');
+            showKeyModal();
+            document.getElementById('keyError').textContent = '❌ Неверный ключ';
+            document.getElementById('keyError').classList.remove('hidden');
+          }
+        }
+      } catch (err) {
+        loading.classList.add('hidden');
+        sendBtn.disabled = false;
+        document.getElementById('resultsTitle').textContent = '❌ Ошибка соединения';
+        document.getElementById('resultsContent').innerHTML = `<p>${err.message}</p>`;
+        results.className = 'mt-8 p-6 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800';
+        results.classList.remove('hidden');
+        results.style.display = 'block';
+        toast(err.message, 'error');
+        if (String(err.message).includes('401') || String(err.message).includes('UNAUTHORIZED')) {
+          localStorage.removeItem(STORAGE_KEY);
+          ADMIN_SECRET = null;
+          document.getElementById('mainContainer').classList.add('hidden');
+          showKeyModal();
+        }
+      }
+    });
+
+    async function loadStats() {
+      try {
+        const r = await fetch(`${API_URL}/admin/broadcast/stats`, { headers: { 'X-Admin-Secret': ADMIN_SECRET } });
+        const data = await r.json();
+        if (data.ok && data.stats) {
+          document.getElementById('totalUsers').textContent = data.stats.totalUsers ?? 0;
+          document.getElementById('activeUsers').textContent = data.stats.activeUsers ?? 0;
+        } else if (!r.ok || data.error === 'UNAUTHORIZED') {
+          localStorage.removeItem(STORAGE_KEY);
+          ADMIN_SECRET = null;
+          document.getElementById('mainContainer').classList.add('hidden');
+          showKeyModal();
+          const errEl = document.getElementById('keyError');
+          errEl.textContent = '❌ Неверный ключ';
+          errEl.classList.remove('hidden');
+        }
+      } catch (e) {
+        console.error('loadStats', e);
+      }
+    }
+  </script>
 </body>
 </html>

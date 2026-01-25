@@ -18,8 +18,8 @@ function createServer() {
     allowedHeaders: ["Content-Type", "X-Webapp-Secret", "X-Telegram-Init-Data", "X-Admin-Secret"]
   }));
   
-  app.use(bodyParser.json());
-  app.use(bodyParser.urlencoded({ extended: true }));
+  app.use(bodyParser.json({ limit: "15mb" }));
+  app.use(bodyParser.urlencoded({ extended: true, limit: "15mb" }));
 
   // Статические файлы (для веб-интерфейса рассылок)
   app.use(express.static(path.join(__dirname, "public")));
