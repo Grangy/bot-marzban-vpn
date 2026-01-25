@@ -15,24 +15,33 @@ function initBroadcast(bot) {
  */
 async function sendContent(chatId, message, options = {}) {
   const { photos = [], parseMode = "HTML", keyboard } = options;
+  const caption = (message || "").trim() || undefined;
   const extra = {
     parse_mode: parseMode,
-    caption: (message || "").trim() || undefined,
+    caption,
     ...(keyboard || {})
   };
 
   if (photos.length === 1) {
     await botInstance.telegram.sendPhoto(chatId, { source: photos[0] }, extra);
   } else if (photos.length > 1) {
-    const media = photos.map((buf, i) => ({
-      type: "photo",
-      media: { source: buf },
-      caption: i === 0 ? ((message || "").trim() || undefined) : undefined,
-      parse_mode: i === 0 ? parseMode : undefined
-    }));
-    await botInstance.telegram.sendMediaGroup(chatId, media);
-    if (keyboard?.reply_markup) {
-      await botInstance.telegram.sendMessage(chatId, "📱", { reply_markup: keyboard.reply_markup });
+    const hasButton = keyboard?.reply_markup;
+    if (hasButton) {
+      // Кнопка в том же сообщении: первое фото с подписью и reply_markup, остальные — альбомом
+      await botInstance.telegram.sendPhoto(chatId, { source: photos[0] }, extra);
+      const rest = photos.slice(1).map((buf) => ({
+        type: "photo",
+        media: { source: buf }
+      }));
+      await botInstance.telegram.sendMediaGroup(chatId, rest);
+    } else {
+      const media = photos.map((buf, i) => ({
+        type: "photo",
+        media: { source: buf },
+        caption: i === 0 ? caption : undefined,
+        parse_mode: i === 0 ? parseMode : undefined
+      }));
+      await botInstance.telegram.sendMediaGroup(chatId, media);
     }
   } else {
     await botInstance.telegram.sendMessage(chatId, message, extra);
