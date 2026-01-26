@@ -36,6 +36,8 @@ model User {
   subscriptions Subscription[]
   topUps         TopUp[]
 
+  noTrafficReminderSentAt DateTime?   // напоминание «купили, но не подключились» (2ч после покупки) отправлено
+
   @@unique([telegramId, chatId], name: "telegramId_chatId")
   @@index([telegramId])
   @@index([chatId])
