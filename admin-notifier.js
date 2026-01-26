@@ -653,6 +653,42 @@ ${isReusable ? "✅ Промокод многоразовый - можно ис�
     }
   });
 
+  // Команда /delpayment <id> — удалить пополнение из БД (сначала реферальные бонусы, затем TopUp)
+  bot.command("delpayment", async (ctx) => {
+    const chatId = String(ctx.chat.id);
+    if (chatId !== ADMIN_GROUP_ID) return;
+
+    try {
+      const text = ctx.message?.text || "";
+      const match = text.match(/^\/delpayment\s+(\d+)$/);
+      if (!match) {
+        return ctx.reply("Использование: /delpayment <id>\nПример: /delpayment 42");
+      }
+
+      const topupId = parseInt(match[1], 10);
+      const topup = await prisma.topUp.findUnique({ where: { id: topupId } });
+      if (!topup) {
+        return ctx.reply(`❌ Пополнение с ID ${topupId} не найдено`);
+      }
+
+      const bonusesCount = await prisma.referralBonus.count({ where: { topupId } });
+      if (bonusesCount > 0) {
+        await prisma.referralBonus.deleteMany({ where: { topupId } });
+      }
+      await prisma.topUp.delete({ where: { id: topupId } });
+
+      let msg = `🗑 <b>Пополнение удалено</b>\n\n`;
+      msg += `📋 ID: <code>${topupId}</code>\n`;
+      msg += `📋 Order: <code>${topup.orderId}</code>\n`;
+      msg += `💵 Сумма: ${ruMoney(topup.amount)}\n`;
+      if (bonusesCount > 0) msg += `📎 Удалено реферальных бонусов: ${bonusesCount}\n`;
+      await ctx.reply(msg, { parse_mode: "HTML" });
+    } catch (err) {
+      console.error("[ADMIN] Error in /delpayment command:", err);
+      await ctx.reply(`❌ Ошибка: ${err.message}`);
+    }
+  });
+
   // Команда /topref - топ рефералов (люди, которые пригласили больше всего друзей)
   bot.command("topref", async (ctx) => {
     const chatId = String(ctx.chat.id);
@@ -852,6 +888,7 @@ ${isReusable ? "✅ Промокод многоразовый - можно ис�
   console.log("📊 Command /stat available in admin group");
   console.log("🏆 Command /topref available in admin group");
   console.log("💳 Command /payment available in admin group");
+  console.log("🗑 Command /delpayment available in admin group");
 }
 
 /**
