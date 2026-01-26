@@ -415,10 +415,15 @@ bot.action("balance_refresh", async (ctx) => {
       });
 
       if (!result.ok) {
+        // Получаем актуальный баланс пользователя
+        const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+        const currentBalance = user?.balance || 0;
+        const requiredAmount = plan.price - currentBalance;
+        
         await editOrAnswer(
           ctx,
-          `❌ Недостаточно средств для покупки: ${plan.label} за ${ruMoney(plan.price)}.\nПополните баланс в меню «Баланс».`,
-          buyMenu()
+          `💳 Для покупки подписки нужно пополнить баланс.\n\nТекущий баланс: ${ruMoney(currentBalance)}\nСтоимость подписки: ${ruMoney(plan.price)}\nНеобходимо пополнить: ${ruMoney(requiredAmount)}\n\nВыберите сумму пополнения:`,
+          topupMenu(requiredAmount)
         );
         return;
       }
@@ -720,10 +725,11 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
 
     const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
     if (user.balance < plan.price) {
+      const requiredAmount = plan.price - user.balance;
       await editOrAnswer(
         ctx,
-        `❌ Недостаточно средств для продления (${plan.label} за ${ruMoney(plan.price)}).\nПополните баланс.`,
-        mainMenu(user.balance)
+        `💳 Для продления подписки нужно пополнить баланс.\n\nТекущий баланс: ${ruMoney(user.balance)}\nСтоимость продления: ${ruMoney(plan.price)}\nНеобходимо пополнить: ${ruMoney(requiredAmount)}\n\nВыберите сумму пополнения:`,
+        topupMenu(requiredAmount)
       );
       return;
     }

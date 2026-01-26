@@ -154,14 +154,22 @@ function balanceMenu(balanceRub = 0) {
 }
 
 
-function topupMenu() {
-  return Markup.inlineKeyboard([
-    [Markup.button.callback(`+ ${ruMoney(120)}`, "topup_120")],
-    [Markup.button.callback(`+ ${ruMoney(330)}`, "topup_330")],
-    [Markup.button.callback(`+ ${ruMoney(570)}`, "topup_570")],
-    [Markup.button.callback(`+ ${ruMoney(1140)}`, "topup_1140")],
-    [Markup.button.callback("⬅️ Назад", "back")],
-  ]);
+function topupMenu(requiredAmount = null) {
+  const buttons = [];
+  
+  // Если указана нужная сумма и её нет в стандартных - добавляем кнопку с нужной суммой
+  if (requiredAmount && requiredAmount > 0 && !TOPUP_AMOUNTS.includes(requiredAmount)) {
+    buttons.push([Markup.button.callback(`💰 Пополнить на ${ruMoney(requiredAmount)}`, `topup_${requiredAmount}`)]);
+  }
+  
+  // Стандартные суммы
+  TOPUP_AMOUNTS.forEach(amount => {
+    buttons.push([Markup.button.callback(`+ ${ruMoney(amount)}`, `topup_${amount}`)]);
+  });
+  
+  buttons.push([Markup.button.callback("⬅️ Назад", "back")]);
+  
+  return Markup.inlineKeyboard(buttons);
 }
 
 function paymentSuccessMenu() {

@@ -2,6 +2,7 @@
 const bus = require("./events");
 const { prisma } = require("./db");
 const { ruMoney } = require("./menus");
+const { markTopupSuccessAndCredit } = require("./payment");
 
 // ID группы для уведомлений
 const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID || "-5184781938";
@@ -551,6 +552,107 @@ ${isReusable ? "✅ Промокод многоразовый - можно ис�
     }
   });
 
+  // Команда /payment - управление пополнениями
+  // /payment [id] - одобрить пополнение по ID
+  // /payment - показать 5 последних пополнений
+  bot.command("payment", async (ctx) => {
+    const chatId = String(ctx.chat.id);
+    
+    if (chatId !== ADMIN_GROUP_ID) {
+      return;
+    }
+    
+    try {
+      const text = ctx.message?.text || "";
+      const match = text.match(/^\/payment(?:\s+(\d+))?$/);
+      
+      if (!match) {
+        return ctx.reply("Использование: /payment [id] - одобрить пополнение по ID\n/payment - показать 5 последних пополнений");
+      }
+      
+      const topupId = match[1] ? parseInt(match[1], 10) : null;
+      
+      if (topupId) {
+        // Одобрить пополнение по ID
+        const topup = await prisma.topUp.findUnique({ where: { id: topupId } });
+        if (!topup) {
+          return ctx.reply(`❌ Пополнение с ID ${topupId} не найдено`);
+        }
+        
+        if (topup.status === "SUCCESS" && topup.credited) {
+          return ctx.reply(`✅ Пополнение #${topupId} уже успешно и зачислено`);
+        }
+        
+        const result = await markTopupSuccessAndCredit(topupId);
+        
+        if (result.ok) {
+          const user = await prisma.user.findUnique({ where: { id: topup.userId } });
+          const username = user?.accountName || "Без username";
+          const telegramId = user?.telegramId || "N/A";
+          
+          let msg = `✅ <b>Пополнение одобрено и зачислено!</b>\n\n`;
+          msg += `📋 ID: <code>${topupId}</code>\n`;
+          msg += `👤 Пользователь: ${username}\n`;
+          msg += `🆔 Telegram ID: <code>${telegramId}</code>\n`;
+          msg += `💵 Сумма: <b>${ruMoney(topup.amount)}</b>\n`;
+          msg += `💳 Новый баланс: ${ruMoney(user?.balance || 0)}\n`;
+          msg += `📋 Order ID: <code>${topup.orderId}</code>\n`;
+          
+          if (result.alreadyCredited) {
+            msg += `\n⚠️ Баланс уже был зачислен ранее`;
+          } else if (result.credited) {
+            msg += `\n✅ Баланс зачислен`;
+          }
+          
+          await ctx.reply(msg, { parse_mode: "HTML" });
+        } else {
+          await ctx.reply(`❌ Ошибка: ${result.reason || "Неизвестная ошибка"}`);
+        }
+      } else {
+        // Показать 5 последних пополнений
+        const topups = await prisma.topUp.findMany({
+          take: 5,
+          orderBy: { createdAt: "desc" },
+          include: {
+            user: {
+              select: {
+                accountName: true,
+                telegramId: true
+              }
+            }
+          }
+        });
+        
+        if (topups.length === 0) {
+          return ctx.reply("📭 Нет пополнений в базе");
+        }
+        
+        let msg = `📋 <b>Последние 5 пополнений:</b>\n\n`;
+        
+        for (const t of topups) {
+          const username = t.user?.accountName || "Без username";
+          const telegramId = t.user?.telegramId || "N/A";
+          const statusEmoji = t.status === "SUCCESS" ? "✅" : t.status === "FAILED" ? "❌" : t.status === "TIMEOUT" ? "⏳" : "⏸️";
+          const creditedMark = t.credited ? "💰" : "";
+          
+          msg += `${statusEmoji} <b>#${t.id}</b> ${creditedMark}\n`;
+          msg += `   👤 ${username} (<code>${telegramId}</code>)\n`;
+          msg += `   💵 ${ruMoney(t.amount)}\n`;
+          msg += `   📊 ${t.status}${t.credited ? " (зачислено)" : ""}\n`;
+          msg += `   📅 ${formatDate(t.createdAt)}\n`;
+          msg += `   📋 Order: <code>${t.orderId}</code>\n\n`;
+        }
+        
+        msg += `💡 Используйте <code>/payment &lt;id&gt;</code> для одобрения пополнения`;
+        
+        await ctx.reply(msg, { parse_mode: "HTML" });
+      }
+    } catch (err) {
+      console.error("[ADMIN] Error in /payment command:", err);
+      await ctx.reply(`❌ Ошибка: ${err.message}`);
+    }
+  });
+
   // Команда /topref - топ рефералов (люди, которые пригласили больше всего друзей)
   bot.command("topref", async (ctx) => {
     const chatId = String(ctx.chat.id);
@@ -749,6 +851,7 @@ ${isReusable ? "✅ Промокод многоразовый - можно ис�
   console.log("📢 Admin notifier initialized (group: " + ADMIN_GROUP_ID + ")");
   console.log("📊 Command /stat available in admin group");
   console.log("🏆 Command /topref available in admin group");
+  console.log("💳 Command /payment available in admin group");
 }
 
 /**
