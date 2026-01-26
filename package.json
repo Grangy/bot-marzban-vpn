@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "analyze-no-traffic": "node analyze-no-traffic.js",
+    "analyze-no-traffic:send": "node analyze-no-traffic.js --send"
   },
   "keywords": [],
   "author": "",

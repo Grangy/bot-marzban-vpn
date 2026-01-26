@@ -6,15 +6,23 @@
  * Идентификация: telegram ID. Подписки в Marzban имеют вид username = "683203214_M1_1323",
  * первая часть — telegram ID.
  *
- * Использование: node analyze-no-traffic.js
- * Запускать на сервере (где доступен Marzban API). Пока только анализ и подсчёт, без рассылки.
+ * Использование:
+ *   node analyze-no-traffic.js        — только анализ, без рассылки
+ *   node analyze-no-traffic.js --send — анализ + рассылка сообщения
+ * Запускать на сервере (доступен Marzban API и BOT_TOKEN).
  */
 
 require("dotenv").config();
+const { Telegraf } = require("telegraf");
 const { prisma } = require("./db");
 
 const MARZBAN_API_URL = process.env.MARZBAN_API_URL;
 const MARZBAN_TOKEN = process.env.MARZBAN_TOKEN;
+const BOT_TOKEN = process.env.BOT_TOKEN;
+
+const DRY_RUN = !process.argv.includes("--send");
+
+const BROADCAST_MESSAGE = `Доброго времени суток! Видим что вы приобрели подписку но не подключились. Возникли технические сложности ? Что то не работает? Мы всегда вам поможем @supmaxgroot`;
 
 /** Извлекает telegram ID из username Marzban (формат: 683203214_M1_1323). */
 function parseTelegramIdFromUsername(username) {
@@ -151,12 +159,60 @@ async function main() {
 
   console.log("\n--- Итог ---");
   console.log(`Всего пользователей для возможной рассылки: ${matched.length}`);
-  console.log("Рассылка в скрипте не выполняется.");
+
+  if (DRY_RUN) {
+    console.log("\n🔍 Режим предпросмотра. Для рассылки запустите с флагом --send:");
+    console.log("   node analyze-no-traffic.js --send");
+    return;
+  }
+
+  if (!BOT_TOKEN) {
+    throw new Error("BOT_TOKEN не задан. Рассылка невозможна.");
+  }
+
+  console.log("\n📝 Текст рассылки:");
+  console.log("-".repeat(50));
+  console.log(BROADCAST_MESSAGE);
+  console.log("-".repeat(50));
+  console.log("\n⚠️  Будет отправлено сообщений:", matched.length);
+  console.log("Для отмены нажмите Ctrl+C. Через 5 секунд начнётся отправка...\n");
+  await new Promise((r) => setTimeout(r, 5000));
+
+  const bot = new Telegraf(BOT_TOKEN);
+  await bot.telegram.getMe();
+  console.log("✅ Бот инициализирован\n");
+
+  const results = { total: matched.length, sent: 0, failed: 0, errors: [] };
+
+  for (let i = 0; i < matched.length; i++) {
+    const r = matched[i];
+    try {
+      await bot.telegram.sendMessage(r.chatId, BROADCAST_MESSAGE);
+      results.sent++;
+      console.log(`✅ [${i + 1}/${matched.length}] ${r.accountName || r.telegramId} (${r.chatId})`);
+    } catch (e) {
+      results.failed++;
+      const code = e.response?.error_code ?? "?";
+      results.errors.push({ telegramId: r.telegramId, chatId: r.chatId, error: code, msg: e.message });
+      console.log(`❌ [${i + 1}/${matched.length}] ${r.accountName || r.telegramId}: ${code}`);
+    }
+    if (i < matched.length - 1) await new Promise((r) => setTimeout(r, 50));
+  }
+
+  console.log("\n--- Итоги рассылки ---");
+  console.log(`Всего: ${results.total} | Отправлено: ${results.sent} | Ошибок: ${results.failed}`);
+  if (results.errors.length) {
+    results.errors.forEach((err) => console.log(`   • ${err.telegramId}: ${err.error} ${err.msg}`));
+  }
 }
 
 main()
-  .then(() => process.exit(0))
-  .catch((e) => {
+  .then(async () => {
+    await prisma.$disconnect();
+    process.exit(0);
+  })
+  .catch(async (e) => {
     console.error(e);
+    await prisma.$disconnect();
     process.exit(1);
   });
