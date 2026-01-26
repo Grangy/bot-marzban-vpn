@@ -231,7 +231,6 @@ function registerPromo(bot) {
     const result = await activatePromoCodeForUser(ctx, inputCode);
 
     if (result.ok) {
-      // Формируем кнопки: ссылки на подписки (если есть) + инструкции + меню
       const buttons = [];
       
       if (result.subscriptionUrl || result.subscriptionUrl2) {
@@ -243,7 +242,12 @@ function registerPromo(bot) {
         }
       }
       
+      if (result.type === PROMO_TYPES.ADMIN_BALANCE) {
+        buttons.push([Markup.button.callback("🛒 Купить подписку", "buy")]);
+      }
+      
       buttons.push(
+        [Markup.button.callback("📦 Мои подписки", "my_subs")],
         [Markup.button.callback("📖 Инструкции", "instructions")],
         [Markup.button.callback("⬅️ В меню", "back")]
       );
@@ -282,7 +286,6 @@ function registerPromo(bot) {
     const result = await activatePromoCodeForUser(ctx, inputCode);
 
     if (result.ok) {
-      // Формируем кнопки: ссылки на подписки (если есть) + инструкции + меню
       const buttons = [];
       
       if (result.subscriptionUrl || result.subscriptionUrl2) {
@@ -294,7 +297,12 @@ function registerPromo(bot) {
         }
       }
       
+      if (result.type === PROMO_TYPES.ADMIN_BALANCE) {
+        buttons.push([Markup.button.callback("🛒 Купить подписку", "buy")]);
+      }
+      
       buttons.push(
+        [Markup.button.callback("📦 Мои подписки", "my_subs")],
         [Markup.button.callback("📖 Инструкции", "instructions")],
         [Markup.button.callback("⬅️ В меню", "back")]
       );
