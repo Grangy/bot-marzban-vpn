@@ -231,11 +231,24 @@ function registerPromo(bot) {
     const result = await activatePromoCodeForUser(ctx, inputCode);
 
     if (result.ok) {
-      // Для всех успешных активаций промокодов добавляем кнопки "Инструкции" и "В меню"
-      const keyboard = Markup.inlineKeyboard([
+      // Формируем кнопки: ссылки на подписки (если есть) + инструкции + меню
+      const buttons = [];
+      
+      if (result.subscriptionUrl || result.subscriptionUrl2) {
+        if (result.subscriptionUrl) {
+          buttons.push([Markup.button.url("🔗 Подключить", result.subscriptionUrl)]);
+        }
+        if (result.subscriptionUrl2) {
+          buttons.push([Markup.button.url("🔗 Подключить 2 (МТС, Миранда)", result.subscriptionUrl2)]);
+        }
+      }
+      
+      buttons.push(
         [Markup.button.callback("📖 Инструкции", "instructions")],
         [Markup.button.callback("⬅️ В меню", "back")]
-      ]);
+      );
+      
+      const keyboard = Markup.inlineKeyboard(buttons);
       await ctx.reply(result.message, keyboard);
       // Не вызываем next(), так как мы обработали сообщение
     } else {
@@ -269,11 +282,24 @@ function registerPromo(bot) {
     const result = await activatePromoCodeForUser(ctx, inputCode);
 
     if (result.ok) {
-      // Для всех успешных активаций промокодов добавляем кнопки "Инструкции" и "В меню"
-      const keyboard = Markup.inlineKeyboard([
+      // Формируем кнопки: ссылки на подписки (если есть) + инструкции + меню
+      const buttons = [];
+      
+      if (result.subscriptionUrl || result.subscriptionUrl2) {
+        if (result.subscriptionUrl) {
+          buttons.push([Markup.button.url("🔗 Подключить", result.subscriptionUrl)]);
+        }
+        if (result.subscriptionUrl2) {
+          buttons.push([Markup.button.url("🔗 Подключить 2 (МТС, Миранда)", result.subscriptionUrl2)]);
+        }
+      }
+      
+      buttons.push(
         [Markup.button.callback("📖 Инструкции", "instructions")],
         [Markup.button.callback("⬅️ В меню", "back")]
-      ]);
+      );
+      
+      const keyboard = Markup.inlineKeyboard(buttons);
       return ctx.reply(result.message, keyboard);
     } else {
       return ctx.reply(result.message);

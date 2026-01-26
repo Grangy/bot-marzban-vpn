@@ -365,18 +365,15 @@ async function activateReferralPromo(userId, owner) {
     
     const updatedSub = await prisma.subscription.findUnique({ where: { id: result.subscriptionId } });
     
-    let message = `✅ Реферальный промокод активирован!\n\n🎁 Вы получили VPN на 3 дня с обходом блокировок мобильной связи.`;
+    let message = `✅ Реферальный промокод активирован!\n\n🎁 Вы получили VPN на 3 дня с обходом блокировок мобильной связи.\n\n📱 Ссылки на подписки в разделе «Мои подписки».`;
     
-    if (updatedSub.subscriptionUrl) {
-      message += `\n\n🔗 Ссылка на подписку: ${updatedSub.subscriptionUrl}`;
-    }
-    if (updatedSub.subscriptionUrl2) {
-      message += `\n\n🔗 Ссылка для операторов МТС, Миранда и других: ${updatedSub.subscriptionUrl2}`;
-    }
-    
-    message += `\n\n📱 Инструкции по настройке в разделе "📖 Инструкции"`;
-    
-    return { ok: true, message, subscriptionId: result.subscriptionId };
+    return { 
+      ok: true, 
+      message, 
+      subscriptionId: result.subscriptionId,
+      subscriptionUrl: updatedSub.subscriptionUrl,
+      subscriptionUrl2: updatedSub.subscriptionUrl2
+    };
   } catch (error) {
     console.error("[PROMO MANAGER] Referral activation error:", error);
     return { ok: false, message: "❌ Ошибка при активации промокода. Попробуйте позже." };
@@ -531,18 +528,15 @@ async function activateAdminDaysPromo(userId, promo) {
     const updatedSub = await prisma.subscription.findUnique({ where: { id: result.subscriptionId } });
     
     const promoName = promo.customName ? `"${promo.customName}"` : "промокод";
-    let message = `🎉 ${promoName} активирован!\n\n✅ Вам начислена подписка на ${result.days} ${result.days === 1 ? 'день' : result.days < 5 ? 'дня' : 'дней'}`;
+    let message = `🎉 ${promoName} активирован!\n\n✅ Вам начислена подписка на ${result.days} ${result.days === 1 ? 'день' : result.days < 5 ? 'дня' : 'дней'}\n\n📱 Ссылки на подписки в разделе «Мои подписки».`;
     
-    if (updatedSub.subscriptionUrl) {
-      message += `\n\n🔗 Ссылка на подписку: ${updatedSub.subscriptionUrl}`;
-    }
-    if (updatedSub.subscriptionUrl2) {
-      message += `\n\n🔗 Ссылка для операторов МТС, Миранда и других: ${updatedSub.subscriptionUrl2}`;
-    }
-    
-    message += `\n\n📱 Инструкции по настройке в разделе "📖 Инструкции"`;
-    
-    return { ok: true, message, subscriptionId: result.subscriptionId };
+    return { 
+      ok: true, 
+      message, 
+      subscriptionId: result.subscriptionId,
+      subscriptionUrl: updatedSub.subscriptionUrl,
+      subscriptionUrl2: updatedSub.subscriptionUrl2
+    };
   } catch (error) {
     console.error("[PROMO MANAGER] Admin days activation error:", error);
     if (error.code === "P2002") {
