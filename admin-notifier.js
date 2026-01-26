@@ -275,6 +275,23 @@ async function sendStats(chatId = null) {
 function initAdminNotifier(bot) {
   botInstance = bot;
 
+  // Команда /admhelp — справка по всем админ-командам
+  bot.command("admhelp", async (ctx) => {
+    const chatId = String(ctx.chat.id);
+    if (chatId !== ADMIN_GROUP_ID) return;
+
+    const msg = `📋 <b>Админ-команды</b>\n\n` +
+      `<code>/stat</code> — статистика (день/неделя, подписки, пополнения)\n\n` +
+      `<code>/createpromo</code> <i>сумма</i> — промокод на баланс (одноразовый)\n` +
+      `<code>/createpromo days</code> <i>дни</i> [название] [--reusable] — промокод на дни\n\n` +
+      `<code>/promos</code> — список активных промокодов\n\n` +
+      `<code>/payment</code> — 5 последних пополнений\n` +
+      `<code>/payment</code> <i>id</i> — одобрить пополнение и зачислить баланс\n\n` +
+      `<code>/delpayment</code> <i>id</i> — удалить пополнение из БД\n\n` +
+      `<code>/topref</code> — топ рефералов`;
+    await ctx.reply(msg, { parse_mode: "HTML" });
+  });
+
   // Команда /stat в админ-группе
   bot.command("stat", async (ctx) => {
     const chatId = String(ctx.chat.id);
@@ -889,6 +906,7 @@ ${isReusable ? "✅ Промокод многоразовый - можно ис�
   console.log("🏆 Command /topref available in admin group");
   console.log("💳 Command /payment available in admin group");
   console.log("🗑 Command /delpayment available in admin group");
+  console.log("📋 Command /admhelp available in admin group");
 }
 
 /**
