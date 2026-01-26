@@ -3,11 +3,45 @@ const bus = require("./events");
 const { prisma } = require("./db");
 const { ruMoney } = require("./menus");
 const { markTopupSuccessAndCredit } = require("./payment");
+const { Markup } = require("telegraf");
+const crypto = require("crypto");
 
 // ID группы для уведомлений
 const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID || "-5184781938";
 
 let botInstance = null;
+
+/** Состояние "ожидание ввода" для админ-меню: chatId -> { action, fromId? } */
+const admState = new Map();
+
+function getAdmMainMenu() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback("📊 Статистика", "adm_stat")],
+    [Markup.button.callback("🎁 Промокоды", "adm_promos"), Markup.button.callback("💳 Пополнения", "adm_payments")],
+    [Markup.button.callback("📈 Топ рефералов", "adm_topref")],
+    [Markup.button.callback("📋 Справка", "adm_help")],
+  ]);
+}
+
+function getAdmPromosMenu() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback("➕ На баланс", "adm_create_balance"), Markup.button.callback("➕ На дни", "adm_create_days")],
+    [Markup.button.callback("📋 Список промокодов", "adm_promos_list")],
+    [Markup.button.callback("⬅️ Назад", "adm_back")],
+  ]);
+}
+
+function getAdmPaymentMenu() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback("📋 5 последних", "adm_payment_list")],
+    [Markup.button.callback("✅ Одобрить по ID", "adm_payment_approve"), Markup.button.callback("🗑 Удалить по ID", "adm_delpayment")],
+    [Markup.button.callback("⬅️ Назад", "adm_back")],
+  ]);
+}
+
+function admCancelKeyboard() {
+  return Markup.inlineKeyboard([[Markup.button.callback("❌ Отмена", "adm_cancel")]]);
+}
 
 /**
  * Форматирование даты (МСК)
@@ -288,8 +322,398 @@ function initAdminNotifier(bot) {
       `<code>/payment</code> — 5 последних пополнений\n` +
       `<code>/payment</code> <i>id</i> — одобрить пополнение и зачислить баланс\n\n` +
       `<code>/delpayment</code> <i>id</i> — удалить пополнение из БД\n\n` +
-      `<code>/topref</code> — топ рефералов`;
+      `<code>/topref</code> — топ рефералов\n\n` +
+      `<code>/admmenu</code> — админ-меню с кнопками`;
     await ctx.reply(msg, { parse_mode: "HTML" });
+  });
+
+  // Команда /admmenu — админ-меню с кнопками
+  bot.command("admmenu", async (ctx) => {
+    const chatId = String(ctx.chat.id);
+    if (chatId !== ADMIN_GROUP_ID) return;
+    admState.delete(chatId);
+    await ctx.reply("🔧 <b>Админ-меню</b>", { parse_mode: "HTML", ...getAdmMainMenu() });
+  });
+
+  // Обработчики кнопок админ-меню
+  bot.action("adm_stat", async (ctx) => {
+    if (String(ctx.chat?.id) !== ADMIN_GROUP_ID) return;
+    try {
+      await ctx.answerCbQuery();
+      await ctx.reply("⏳ Собираю статистику...");
+      await sendStats(ADMIN_GROUP_ID);
+    } catch (e) {
+      console.error("[ADMIN] adm_stat:", e);
+      await ctx.answerCbQuery("❌ Ошибка").catch(() => {});
+    }
+  });
+
+  bot.action("adm_promos", async (ctx) => {
+    if (String(ctx.chat?.id) !== ADMIN_GROUP_ID) return;
+    try {
+      await ctx.answerCbQuery();
+      await ctx.editMessageText("🎁 <b>Промокоды</b>", { parse_mode: "HTML", ...getAdmPromosMenu() });
+    } catch (e) {
+      console.error("[ADMIN] adm_promos:", e);
+      await ctx.answerCbQuery("❌ Ошибка").catch(() => {});
+    }
+  });
+
+  bot.action("adm_payments", async (ctx) => {
+    if (String(ctx.chat?.id) !== ADMIN_GROUP_ID) return;
+    try {
+      await ctx.answerCbQuery();
+      await ctx.editMessageText("💳 <b>Пополнения</b>", { parse_mode: "HTML", ...getAdmPaymentMenu() });
+    } catch (e) {
+      console.error("[ADMIN] adm_payments:", e);
+      await ctx.answerCbQuery("❌ Ошибка").catch(() => {});
+    }
+  });
+
+  bot.action("adm_back", async (ctx) => {
+    if (String(ctx.chat?.id) !== ADMIN_GROUP_ID) return;
+    try {
+      await ctx.answerCbQuery();
+      await ctx.editMessageText("🔧 <b>Админ-меню</b>", { parse_mode: "HTML", ...getAdmMainMenu() });
+    } catch (e) {
+      console.error("[ADMIN] adm_back:", e);
+      await ctx.answerCbQuery("❌ Ошибка").catch(() => {});
+    }
+  });
+
+  bot.action("adm_help", async (ctx) => {
+    if (String(ctx.chat?.id) !== ADMIN_GROUP_ID) return;
+    try {
+      await ctx.answerCbQuery();
+      const msg = `📋 <b>Админ-команды</b>\n\n` +
+        `<code>/stat</code> — статистика\n` +
+        `<code>/createpromo</code> <i>сумма</i> / <code>days</code> <i>дни</i> …\n` +
+        `<code>/promos</code> — список промокодов\n` +
+        `<code>/payment</code> [id] — пополнения\n` +
+        `<code>/delpayment</code> <i>id</i> — удалить пополнение\n` +
+        `<code>/topref</code> — топ рефералов\n` +
+        `<code>/admmenu</code> — это меню`;
+      await ctx.reply(msg, { parse_mode: "HTML" });
+    } catch (e) {
+      console.error("[ADMIN] adm_help:", e);
+      await ctx.answerCbQuery("❌ Ошибка").catch(() => {});
+    }
+  });
+
+  bot.action("adm_promos_list", async (ctx) => {
+    if (String(ctx.chat?.id) !== ADMIN_GROUP_ID) return;
+    try {
+      await ctx.answerCbQuery();
+      const promos = await prisma.adminPromo.findMany({
+        where: {
+          OR: [
+            { usedById: null, isReusable: false },
+            { isReusable: true },
+          ],
+        },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+      });
+      if (promos.length === 0) {
+        await ctx.reply("📭 Нет активных промокодов");
+        return;
+      }
+      let msg = "🎁 <b>Активные промокоды:</b>\n\n";
+      for (const p of promos) {
+        if (p.type === "BALANCE") {
+          const status = p.isReusable ? `🔄 (использований: ${p.useCount})` : (p.usedById ? "❌ использован" : "✅ активен");
+          msg += `<code>${p.code}</code> — 💵 ${ruMoney(p.amount || 0)} ${status}\n`;
+        } else {
+          const status = p.isReusable ? `🔄 многораз. (${p.useCount})` : (p.usedById ? "❌ использован" : "✅ активен");
+          const nameText = p.customName ? ` "${p.customName}"` : "";
+          msg += `<code>${p.code}</code>${nameText} — 📅 ${p.days || 0} дн. ${status}\n`;
+        }
+      }
+      const balancePromos = promos.filter(p => p.type === "BALANCE" && (!p.isReusable ? !p.usedById : true)).length;
+      const daysPromos = promos.filter(p => p.type === "DAYS" && (!p.isReusable ? !p.usedById : true)).length;
+      msg += `\n📊 Всего: ${promos.length} (💵 ${balancePromos}, 📅 ${daysPromos})`;
+      await ctx.reply(msg, { parse_mode: "HTML" });
+    } catch (e) {
+      console.error("[ADMIN] adm_promos_list:", e);
+      await ctx.answerCbQuery("❌ Ошибка").catch(() => {});
+      await ctx.reply("❌ Ошибка: " + (e.message || String(e))).catch(() => {});
+    }
+  });
+
+  bot.action("adm_create_balance", async (ctx) => {
+    if (String(ctx.chat?.id) !== ADMIN_GROUP_ID) return;
+    try {
+      await ctx.answerCbQuery();
+      const chatId = String(ctx.chat.id);
+      admState.set(chatId, { action: "create_balance", fromId: ctx.from?.id });
+      await ctx.reply("💵 Введите сумму (руб):", admCancelKeyboard());
+    } catch (e) {
+      console.error("[ADMIN] adm_create_balance:", e);
+      await ctx.answerCbQuery("❌ Ошибка").catch(() => {});
+    }
+  });
+
+  bot.action("adm_create_days", async (ctx) => {
+    if (String(ctx.chat?.id) !== ADMIN_GROUP_ID) return;
+    try {
+      await ctx.answerCbQuery();
+      const chatId = String(ctx.chat.id);
+      admState.set(chatId, { action: "create_days", fromId: ctx.from?.id });
+      await ctx.reply(
+        "📅 Введите: <code>дни [название] [--reusable]</code>\nПример: <code>7 Блогер --reusable</code>",
+        { parse_mode: "HTML", ...admCancelKeyboard() }
+      );
+    } catch (e) {
+      console.error("[ADMIN] adm_create_days:", e);
+      await ctx.answerCbQuery("❌ Ошибка").catch(() => {});
+    }
+  });
+
+  bot.action("adm_payment_list", async (ctx) => {
+    if (String(ctx.chat?.id) !== ADMIN_GROUP_ID) return;
+    try {
+      await ctx.answerCbQuery();
+      const topups = await prisma.topUp.findMany({
+        take: 5,
+        orderBy: { createdAt: "desc" },
+        include: { user: { select: { accountName: true, telegramId: true } } },
+      });
+      if (topups.length === 0) {
+        await ctx.reply("📭 Нет пополнений в базе");
+        return;
+      }
+      let msg = "📋 <b>Последние 5 пополнений:</b>\n\n";
+      for (const t of topups) {
+        const un = t.user?.accountName || "Без username";
+        const tid = t.user?.telegramId || "N/A";
+        const em = t.status === "SUCCESS" ? "✅" : t.status === "FAILED" ? "❌" : t.status === "TIMEOUT" ? "⏳" : "⏸️";
+        const cr = t.credited ? "💰" : "";
+        msg += `${em} <b>#${t.id}</b> ${cr}\n   👤 ${un} (<code>${tid}</code>)\n   💵 ${ruMoney(t.amount)}\n   📊 ${t.status}${t.credited ? " (зачислено)" : ""}\n   📅 ${formatDate(t.createdAt)}\n   📋 Order: <code>${t.orderId}</code>\n\n`;
+      }
+      msg += `💡 <code>/payment &lt;id&gt;</code> — одобрить`;
+      await ctx.reply(msg, { parse_mode: "HTML" });
+    } catch (e) {
+      console.error("[ADMIN] adm_payment_list:", e);
+      await ctx.answerCbQuery("❌ Ошибка").catch(() => {});
+      await ctx.reply("❌ Ошибка: " + (e.message || String(e))).catch(() => {});
+    }
+  });
+
+  bot.action("adm_payment_approve", async (ctx) => {
+    if (String(ctx.chat?.id) !== ADMIN_GROUP_ID) return;
+    try {
+      await ctx.answerCbQuery();
+      const chatId = String(ctx.chat.id);
+      admState.set(chatId, { action: "payment_approve", fromId: ctx.from?.id });
+      await ctx.reply("✅ Введите ID пополнения для одобрения:", admCancelKeyboard());
+    } catch (e) {
+      console.error("[ADMIN] adm_payment_approve:", e);
+      await ctx.answerCbQuery("❌ Ошибка").catch(() => {});
+    }
+  });
+
+  bot.action("adm_delpayment", async (ctx) => {
+    if (String(ctx.chat?.id) !== ADMIN_GROUP_ID) return;
+    try {
+      await ctx.answerCbQuery();
+      const chatId = String(ctx.chat.id);
+      admState.set(chatId, { action: "delpayment", fromId: ctx.from?.id });
+      await ctx.reply("🗑 Введите ID пополнения для удаления:", admCancelKeyboard());
+    } catch (e) {
+      console.error("[ADMIN] adm_delpayment:", e);
+      await ctx.answerCbQuery("❌ Ошибка").catch(() => {});
+    }
+  });
+
+  bot.action("adm_topref", async (ctx) => {
+    if (String(ctx.chat?.id) !== ADMIN_GROUP_ID) return;
+    try {
+      await ctx.answerCbQuery();
+      await ctx.reply("⏳ Собираю статистику по рефералам...");
+      const usersWithReferrals = await prisma.user.findMany({
+        where: { promoCode: { not: null } },
+        include: {
+          promoActivationsAsOwner: { select: { id: true, activatorId: true, createdAt: true, activator: { select: { accountName: true, telegramId: true } } } },
+          referralBonusesAsOwner: { select: { bonusAmount: true, credited: true } },
+        },
+      });
+      const stats = usersWithReferrals.map(user => ({
+        user,
+        referralCount: user.promoActivationsAsOwner.length,
+        totalBonus: user.referralBonusesAsOwner.reduce((s, b) => s + b.bonusAmount, 0),
+        creditedBonus: user.referralBonusesAsOwner.filter(b => b.credited).reduce((s, b) => s + b.bonusAmount, 0),
+      }));
+      stats.sort((a, b) => b.referralCount - a.referralCount);
+      const top = stats.slice(0, 20);
+      if (top.length === 0) {
+        await ctx.reply("📭 Нет пользователей с рефералами");
+        return;
+      }
+      let msg = "🏆 <b>Топ рефералов</b>\n\n";
+      top.forEach((st, i) => {
+        const u = st.user;
+        const name = u.accountName || `ID: ${u.telegramId}`;
+        const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
+        msg += `${medal} <b>${name}</b>\n   📋 <code>${u.promoCode || "N/A"}</code>\n   👥 ${st.referralCount}\n`;
+        if (st.creditedBonus > 0) msg += `   💰 ${ruMoney(st.creditedBonus)}\n`;
+        if (st.totalBonus > st.creditedBonus) msg += `   ⏳ Ожидает: ${ruMoney(st.totalBonus - st.creditedBonus)}\n`;
+        msg += "\n";
+      });
+      const tr = stats.reduce((s, x) => s + x.referralCount, 0);
+      const tu = stats.filter(s => s.referralCount > 0).length;
+      const tb = stats.reduce((s, x) => s + x.creditedBonus, 0);
+      msg += `\n📊 Всего рефералов: <b>${tr}</b>, пользователей: <b>${tu}</b>`;
+      if (tb > 0) msg += `, бонусов: <b>${ruMoney(tb)}</b>`;
+      await ctx.reply(msg, { parse_mode: "HTML" });
+    } catch (e) {
+      console.error("[ADMIN] adm_topref:", e);
+      await ctx.answerCbQuery("❌ Ошибка").catch(() => {});
+      await ctx.reply("❌ Ошибка: " + (e.message || String(e))).catch(() => {});
+    }
+  });
+
+  bot.action("adm_cancel", async (ctx) => {
+    if (String(ctx.chat?.id) !== ADMIN_GROUP_ID) return;
+    try {
+      await ctx.answerCbQuery();
+      admState.delete(String(ctx.chat.id));
+      await ctx.reply("❌ Отменено.");
+    } catch (e) {
+      console.error("[ADMIN] adm_cancel:", e);
+      await ctx.answerCbQuery("❌ Ошибка").catch(() => {});
+    }
+  });
+
+  // Обработка ввода при действиях из админ-меню (create_balance, create_days, payment_approve, delpayment)
+  bot.on("text", async (ctx, next) => {
+    const chatId = String(ctx.chat?.id || "");
+    if (chatId !== ADMIN_GROUP_ID) return next();
+    const state = admState.get(chatId);
+    if (!state) return next();
+    const raw = ctx.message?.text || "";
+    if (raw.startsWith("/")) return next();
+
+    admState.delete(chatId);
+    const text = raw.trim();
+    const fromId = String(state.fromId || ctx.from?.id || "unknown");
+
+    try {
+      if (state.action === "create_balance") {
+        const amount = parseInt(text, 10);
+        if (!Number.isFinite(amount) || amount < 1 || amount > 100000) {
+          await ctx.reply("❌ Сумма от 1 до 100000 ₽");
+          return;
+        }
+        const code = "GIFT" + crypto.randomBytes(4).toString("hex").toUpperCase();
+        await prisma.adminPromo.create({
+          data: { code, type: "BALANCE", amount, isReusable: false, createdBy: fromId },
+        });
+        await ctx.reply(
+          `✅ <b>Промокод создан!</b>\n\n🎁 Код: <code>${code}</code>\n💵 ${ruMoney(amount)}\n\n<code>/promo ${code}</code>`,
+          { parse_mode: "HTML" }
+        );
+      } else if (state.action === "create_days") {
+        const daysMatch = text.match(/^(\d+)(?:\s+(.+))?$/);
+        if (!daysMatch) {
+          await ctx.reply("❌ Формат: дни [название] [--reusable]");
+          return;
+        }
+        const days = parseInt(daysMatch[1], 10);
+        if (days < 1 || days > 365) {
+          await ctx.reply("❌ Дни от 1 до 365");
+          return;
+        }
+        let rest = (daysMatch[2] || "").trim();
+        const isReusable = /\b--reusable\b/i.test(rest);
+        const parts = rest.split(/\s+/).filter(p => p.toLowerCase() !== "--reusable" && p.toLowerCase() !== "reusable");
+        const customName = parts.length ? parts.join(" ").trim() : null;
+        if (customName && customName.length > 100) {
+          await ctx.reply("❌ Название до 100 символов");
+          return;
+        }
+        let code;
+        if (customName) {
+          code = customName.toUpperCase().replace(/\s+/g, "");
+          if (!code || !/^[A-Z0-9-]+$/.test(code)) {
+            await ctx.reply("❌ Название: только A–Z, 0–9, дефис");
+            return;
+          }
+          const existing = await prisma.adminPromo.findUnique({ where: { code } });
+          if (existing) {
+            await ctx.reply(`❌ Промокод <code>${code}</code> уже есть`, { parse_mode: "HTML" });
+            return;
+          }
+          const existingUser = await prisma.user.findUnique({ where: { promoCode: code } });
+          if (existingUser) {
+            await ctx.reply(`❌ Код <code>${code}</code> — реферальный`, { parse_mode: "HTML" });
+            return;
+          }
+        } else {
+          let attempts = 0;
+          while (attempts < 5) {
+            code = "GIFT" + crypto.randomBytes(4).toString("hex").toUpperCase();
+            const ex = await prisma.adminPromo.findUnique({ where: { code } });
+            if (!ex) break;
+            attempts++;
+          }
+          if (attempts >= 5) {
+            await ctx.reply("❌ Не удалось создать уникальный код");
+            return;
+          }
+        }
+        await prisma.adminPromo.create({
+          data: { code, type: "DAYS", days, isReusable, customName: customName || null, createdBy: fromId },
+        });
+        const reuse = isReusable ? "🔄 Многоразовый" : "⚠️ Одноразовый";
+        await ctx.reply(
+          `✅ <b>Промокод создан!</b>\n\n🎁 <code>${code}</code>${customName ? ` "${customName}"` : ""}\n📅 ${days} дн. ${reuse}\n\n<code>/promo ${code}</code>`,
+          { parse_mode: "HTML" }
+        );
+      } else if (state.action === "payment_approve") {
+        const id = parseInt(text, 10);
+        if (!Number.isFinite(id)) {
+          await ctx.reply("❌ Введите ID пополнения (число)");
+          return;
+        }
+        const topup = await prisma.topUp.findUnique({ where: { id } });
+        if (!topup) {
+          await ctx.reply(`❌ Пополнение #${id} не найдено`);
+          return;
+        }
+        if (topup.status === "SUCCESS" && topup.credited) {
+          await ctx.reply(`✅ #${id} уже одобрено и зачислено`);
+          return;
+        }
+        const result = await markTopupSuccessAndCredit(id);
+        if (!result.ok) {
+          await ctx.reply(`❌ ${result.reason || "Ошибка"}`);
+          return;
+        }
+        const user = await prisma.user.findUnique({ where: { id: topup.userId } });
+        await ctx.reply(
+          `✅ <b>Пополнение одобрено</b>\n\n📋 #${id} | 👤 ${user?.accountName || "?"} | 💵 ${ruMoney(topup.amount)}\n💳 Баланс зачислен`,
+          { parse_mode: "HTML" }
+        );
+      } else if (state.action === "delpayment") {
+        const id = parseInt(text, 10);
+        if (!Number.isFinite(id)) {
+          await ctx.reply("❌ Введите ID пополнения (число)");
+          return;
+        }
+        const topup = await prisma.topUp.findUnique({ where: { id } });
+        if (!topup) {
+          await ctx.reply(`❌ Пополнение #${id} не найдено`);
+          return;
+        }
+        const bc = await prisma.referralBonus.count({ where: { topupId: id } });
+        if (bc) await prisma.referralBonus.deleteMany({ where: { topupId: id } });
+        await prisma.topUp.delete({ where: { id } });
+        await ctx.reply(`🗑 Пополнение #${id} удалено${bc ? ` (реф. бонусов: ${bc})` : ""}`);
+      }
+    } catch (e) {
+      console.error("[ADMIN] adm state handler:", e);
+      await ctx.reply("❌ Ошибка: " + (e.message || String(e))).catch(() => {});
+    }
   });
 
   // Команда /stat в админ-группе
@@ -318,7 +742,6 @@ function initAdminNotifier(bot) {
     }
     
     const text = ctx.message?.text || "";
-    const crypto = require("crypto");
     
     // Проверяем формат для дней: /createpromo days <число> [название] [--reusable]
     const daysMatch = text.match(/^\/createpromo\s+days\s+(\d+)(?:\s+(.+))?\s*$/i);
@@ -907,6 +1330,7 @@ ${isReusable ? "✅ Промокод многоразовый - можно ис�
   console.log("💳 Command /payment available in admin group");
   console.log("🗑 Command /delpayment available in admin group");
   console.log("📋 Command /admhelp available in admin group");
+  console.log("🔧 Command /admmenu available in admin group");
 }
 
 /**
