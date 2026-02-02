@@ -5,14 +5,16 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "analyze-no-traffic": "node analyze-no-traffic.js",
-    "analyze-no-traffic:send": "node analyze-no-traffic.js --send"
+    "analyze-no-traffic:send": "node analyze-no-traffic.js --send",
+    "studio": "prisma studio",
+    "studio:fix": "rm -rf node_modules/.prisma node_modules/.cache 2>/dev/null; npx prisma generate && prisma studio"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@prisma/client": "^6.17.1",
+    "@prisma/client": "^6.19.2",
     "axios": "^1.13.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
@@ -23,6 +25,6 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
-    "prisma": "^6.17.1"
+    "prisma": "^6.19.2"
   }
 }
