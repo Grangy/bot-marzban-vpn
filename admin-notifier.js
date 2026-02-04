@@ -5,6 +5,7 @@ const { ruMoney } = require("./menus");
 const { markTopupSuccessAndCredit } = require("./payment");
 const { Markup } = require("telegraf");
 const crypto = require("crypto");
+const XLSX = require("xlsx");
 
 // ID группы для уведомлений
 const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID || "-5184781938";
@@ -33,7 +34,7 @@ function getAdmPromosMenu() {
 
 function getAdmPaymentMenu() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback("📋 5 последних", "adm_payment_list")],
+    [Markup.button.callback("📋 5 последних", "adm_payment_list"), Markup.button.callback("📥 Выгрузка .xlsx", "adm_export_topups")],
     [Markup.button.callback("✅ Одобрить по ID", "adm_payment_approve"), Markup.button.callback("🗑 Удалить по ID", "adm_delpayment")],
     [Markup.button.callback("⬅️ Назад", "adm_back")],
   ]);
@@ -51,6 +52,43 @@ function formatDate(date) {
   const mskDate = new Date(date.getTime() + 3 * 60 * 60 * 1000);
   const pad = (n) => String(n).padStart(2, "0");
   return `${pad(mskDate.getUTCDate())}.${pad(mskDate.getUTCMonth() + 1)}.${mskDate.getUTCFullYear()} ${pad(mskDate.getUTCHours())}:${pad(mskDate.getUTCMinutes())} МСК`;
+}
+
+/**
+ * Сформировать .xlsx со всеми успешными пополнениями. Возвращает { buffer, filename }.
+ */
+async function buildTopupsXlsx() {
+  const topups = await prisma.topUp.findMany({
+    where: { status: "SUCCESS" },
+    include: { user: { select: { telegramId: true, accountName: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const fmtDate = (d) => {
+    if (!d) return "";
+    const x = new Date(d);
+    return x.toISOString().replace("T", " ").slice(0, 19);
+  };
+
+  const rows = topups.map((t) => ({
+    ID: t.id,
+    "User ID": t.userId,
+    "Telegram ID": t.user?.telegramId ?? "",
+    Имя: t.user?.accountName ?? "",
+    "Сумма (₽)": t.amount,
+    "Order ID": t.orderId,
+    "Bill ID": t.billId ?? "",
+    "Дата создания": fmtDate(t.createdAt),
+    "Дата зачисления": fmtDate(t.creditedAt),
+    "Зачислено": t.credited ? "да" : "нет",
+  }));
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws, "Пополнения");
+  const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+  const filename = `topups-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  return { buffer, filename };
 }
 
 /**
@@ -320,7 +358,8 @@ function initAdminNotifier(bot) {
       `<code>/createpromo days</code> <i>дни</i> [название] [--reusable] — промокод на дни\n\n` +
       `<code>/promos</code> — список активных промокодов\n\n` +
       `<code>/payment</code> — 5 последних пополнений\n` +
-      `<code>/payment</code> <i>id</i> — одобрить пополнение и зачислить баланс\n\n` +
+      `<code>/payment</code> <i>id</i> — одобрить пополнение и зачислить баланс\n` +
+      `<code>/exporttopups</code> — выгрузка успешных пополнений в .xlsx\n\n` +
       `<code>/delpayment</code> <i>id</i> — удалить пополнение из БД\n\n` +
       `<code>/topref</code> — топ рефералов\n\n` +
       `<code>/admmenu</code> — админ-меню с кнопками`;
@@ -390,6 +429,7 @@ function initAdminNotifier(bot) {
         `<code>/createpromo</code> <i>сумма</i> / <code>days</code> <i>дни</i> …\n` +
         `<code>/promos</code> — список промокодов\n` +
         `<code>/payment</code> [id] — пополнения\n` +
+        `<code>/exporttopups</code> — выгрузка в .xlsx\n` +
         `<code>/delpayment</code> <i>id</i> — удалить пополнение\n` +
         `<code>/topref</code> — топ рефералов\n` +
         `<code>/admmenu</code> — это меню`;
@@ -1129,6 +1169,39 @@ ${isReusable ? "✅ Промокод многоразовый - можно ис�
     }
   });
 
+  // Команда /exporttopups — выгрузка всех успешных пополнений в .xlsx
+  bot.command("exporttopups", async (ctx) => {
+    const chatId = String(ctx.chat.id);
+    if (chatId !== ADMIN_GROUP_ID) return;
+
+    try {
+      const progressMsg = await ctx.reply("⏳ Формирую выгрузку пополнений...");
+      const { buffer, filename } = await buildTopupsXlsx();
+      await ctx.telegram.sendDocument(chatId, { source: buffer, filename });
+      await ctx.telegram.deleteMessage(chatId, progressMsg.message_id).catch(() => {});
+    } catch (err) {
+      console.error("[ADMIN] Error in /exporttopups:", err);
+      await ctx.reply(`❌ Ошибка: ${err.message}`);
+    }
+  });
+
+  // Кнопка "Выгрузка .xlsx" в меню пополнений
+  bot.action("adm_export_topups", async (ctx) => {
+    if (String(ctx.chat?.id) !== ADMIN_GROUP_ID) return;
+    try {
+      await ctx.answerCbQuery();
+      const chatId = String(ctx.chat.id);
+      const progressMsg = await ctx.reply("⏳ Формирую выгрузку пополнений...");
+      const { buffer, filename } = await buildTopupsXlsx();
+      await ctx.telegram.sendDocument(chatId, { source: buffer, filename });
+      await ctx.telegram.deleteMessage(chatId, progressMsg.message_id).catch(() => {});
+    } catch (e) {
+      console.error("[ADMIN] adm_export_topups:", e);
+      await ctx.answerCbQuery("❌ Ошибка").catch(() => {});
+      await ctx.reply("❌ Ошибка: " + (e.message || String(e))).catch(() => {});
+    }
+  });
+
   // Команда /topref - топ рефералов (люди, которые пригласили больше всего друзей)
   bot.command("topref", async (ctx) => {
     const chatId = String(ctx.chat.id);
@@ -1329,6 +1402,7 @@ ${isReusable ? "✅ Промокод многоразовый - можно ис�
   console.log("🏆 Command /topref available in admin group");
   console.log("💳 Command /payment available in admin group");
   console.log("🗑 Command /delpayment available in admin group");
+  console.log("📥 Command /exporttopups available in admin group");
   console.log("📋 Command /admhelp available in admin group");
   console.log("🔧 Command /admmenu available in admin group");
 }
