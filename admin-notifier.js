@@ -423,9 +423,9 @@ function initAdminNotifier(bot) {
       let msg = `💰 <b>Скидка</b>\n\n`;
       msg += `Статус: ${active ? "✅ включена" : "❌ выключена"}\n`;
       msg += `Процент: ${cfg.percent}%\n`;
-      msg += `До: 00:00 ${d}.${m}\n\n`;
+      msg += `До: 23:59 ${d}.${m}\n\n`;
       msg += `<code>/discount off</code> — выключить\n`;
-      msg += `<code>/discount 20 11.02</code> — 20% до 00:00 11 февраля`;
+      msg += `<code>/discount 20 11.02</code> — 20% до 23:59 11 февраля`;
       await ctx.reply(msg, { parse_mode: "HTML" });
     } catch (e) {
       console.error("[ADMIN] adm_discount:", e);
@@ -1212,10 +1212,10 @@ ${isReusable ? "✅ Промокод многоразовый - можно ис�
         let msg = `💰 <b>Скидка</b>\n\n`;
         msg += `Статус: ${active ? "✅ включена" : "❌ выключена"}\n`;
         msg += `Процент: ${cfg.percent}%\n`;
-        msg += `До: 00:00 ${d}.${m}\n\n`;
+        msg += `До: 23:59 ${d}.${m}\n\n`;
         msg += `Использование:\n`;
         msg += `<code>/discount off</code> — выключить\n`;
-        msg += `<code>/discount 20 11.02</code> — 20% до 00:00 11 февраля`;
+        msg += `<code>/discount 20 11.02</code> — 20% до 23:59 11 февраля`;
         return ctx.reply(msg, { parse_mode: "HTML" });
       }
 
@@ -1237,13 +1237,13 @@ ${isReusable ? "✅ Промокод многоразовый - можно ис�
       const [dd, mm] = dateStr.split(".").map((n) => parseInt(n, 10));
       const now = new Date();
       let year = now.getFullYear();
-      const endDate = new Date(year, mm - 1, dd, 0, 0, 0);
+      const endDate = new Date(year, mm - 1, dd, 23, 59, 0);
       if (endDate <= now) year += 1;
-      const iso = `${year}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}T00:00:00+03:00`;
+      const iso = `${year}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}T23:59:00+03:00`;
       discount.setConfig({ active: true, percent, endAt: iso });
       const d = String(dd).padStart(2, "0");
       const m = String(mm).padStart(2, "0");
-      await ctx.reply(`✅ Скидка -${percent}% до 00:00 ${d}.${m}`);
+      await ctx.reply(`✅ Скидка -${percent}% до 23:59 ${d}.${m}`);
     } catch (err) {
       console.error("[ADMIN] Error in /discount:", err);
       await ctx.reply(`❌ Ошибка: ${err.message}`);
@@ -1484,6 +1484,7 @@ ${isReusable ? "✅ Промокод многоразовый - можно ис�
   console.log("💳 Command /payment available in admin group");
   console.log("🗑 Command /delpayment available in admin group");
   console.log("📥 Command /exporttopups available in admin group");
+  console.log("💰 Command /discount available in admin group");
   console.log("📋 Command /admhelp available in admin group");
   console.log("🔧 Command /admmenu available in admin group");
 }

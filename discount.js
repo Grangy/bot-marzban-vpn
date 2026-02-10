@@ -11,7 +11,7 @@ const CONFIG_PATH = path.join(__dirname, "discount-config.json");
 const DEFAULTS = {
   active: true,
   percent: 20,
-  endAt: "2026-02-11T00:00:00+03:00",
+  endAt: "2026-02-11T23:59:00+03:00",
 };
 
 function getConfig() {
@@ -47,7 +47,7 @@ function getDiscountBanner() {
   const end = new Date(cfg.endAt);
   const d = String(end.getDate()).padStart(2, "0");
   const m = String(end.getMonth() + 1).padStart(2, "0");
-  return `🔥 Скидка -${cfg.percent}% до 00:00 ${d}.${m}`;
+  return `🔥 Скидка -${cfg.percent}% до 23:59 ${d}.${m}`;
 }
 
 /** Округляет до кратного 5 руб */
