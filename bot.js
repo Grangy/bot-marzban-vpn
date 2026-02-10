@@ -1,7 +1,7 @@
 const { Telegraf } = require("telegraf");
 const { prisma } = require("./db");
 const { SubscriptionType } = require("@prisma/client");
-const { mainMenu, planSelectedMenu, PLANS, ruMoney, getPlanPrice, DISCOUNT_BANNER, isDiscountActive } = require("./menus");
+const { mainMenu, planSelectedMenu, PLANS, ruMoney, getPlanPrice, getDiscountBanner, isDiscountActive } = require("./menus");
 const { registerActions } = require("./actions");
 const { registerPromo } = require("./promo");
 const crypto = require("crypto");
@@ -94,7 +94,8 @@ bot.start(async (ctx) => {
     }
 
     const price = getPlanPrice(planKey);
-    const discountLine = isDiscountActive() ? `\n\n${DISCOUNT_BANNER}\n` : "\n\n";
+    const banner = getDiscountBanner();
+    const discountLine = banner ? `\n\n${banner}\n` : "\n\n";
     const planText = `🛒 Выбран тариф: **${plan.label}** — ${ruMoney(price)}${discountLine}Оплата производится с баланса в боте. Если средств не хватает — пополните баланс, затем нажмите «Приобрести».
 
 Выберите действие:`;

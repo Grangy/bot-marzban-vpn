@@ -3,7 +3,7 @@ const crypto = require("crypto");
 const { prisma } = require("./db");
 const { createInvoice } = require("./payment");
 const { createMarzbanUserOnBothServers } = require("./marzban-utils");
-const { PLANS, getPlanPrice, getTopupAmounts, DISCOUNT_BANNER, isDiscountActive } = require("./menus");
+const { PLANS, getPlanPrice, getTopupAmounts, getDiscountBanner, isDiscountActive } = require("./menus");
 
 // Секретный ключ для API (должен быть в .env)
 const WEBAPP_SECRET = process.env.WEBAPP_SECRET || "maxgroot_webapp_secret_key_2026";
@@ -752,14 +752,14 @@ function registerWebAppAPI(app) {
           months: plan.months,
           pricePerMonth: Math.round(price / plan.months),
           buyUrl: `${baseUrl}?start=plan_${key}`,
-          discountBanner: isDiscountActive() ? DISCOUNT_BANNER : null,
+          discountBanner: getDiscountBanner(),
         };
       });
 
     res.json({
       ok: true,
       data: plans,
-      discountBanner: isDiscountActive() ? DISCOUNT_BANNER : null,
+      discountBanner: getDiscountBanner(),
     });
   });
 

@@ -2,24 +2,29 @@ const {
   Markup
 } = require("telegraf");
 
-// Скидка -20% до 00:00 11 февраля (МСК)
-const DISCOUNT_END = new Date("2026-02-11T00:00:00+03:00");
-const DISCOUNT_PERCENT = 20;
-const DISCOUNT_BANNER = "🔥 Скидка -20% до 00:00 11 февраля";
+const discount = require("./discount");
 
 function isDiscountActive() {
-  return new Date() < DISCOUNT_END;
+  return discount.isDiscountActive();
+}
+
+function getDiscountBanner() {
+  return discount.getDiscountBanner();
 }
 
 function getPlanPrice(planKey) {
   const plan = PLANS[planKey];
   if (!plan || !plan.price) return 0;
-  return isDiscountActive() ? Math.round(plan.price * (1 - DISCOUNT_PERCENT / 100)) : plan.price;
+  if (!isDiscountActive()) return plan.price;
+  const cfg = discount.getConfig();
+  const raw = plan.price * (1 - cfg.percent / 100);
+  return discount.roundTo5(raw);
 }
 
 function getTopupAmounts() {
   if (!isDiscountActive()) return TOPUP_AMOUNTS;
-  return TOPUP_AMOUNTS.map((a) => Math.round(a * (1 - DISCOUNT_PERCENT / 100)));
+  const cfg = discount.getConfig();
+  return TOPUP_AMOUNTS.map((a) => discount.roundTo5(a * (1 - cfg.percent / 100)));
 }
 
 const PLANS = {
@@ -211,7 +216,6 @@ module.exports = {
   isDiscountActive,
   getPlanPrice,
   getTopupAmounts,
-  DISCOUNT_BANNER,
   ruMoney,
   formatDate,
   calcEndDate,

@@ -6,6 +6,7 @@ const { markTopupSuccessAndCredit } = require("./payment");
 const { Markup } = require("telegraf");
 const crypto = require("crypto");
 const XLSX = require("xlsx");
+const discount = require("./discount");
 
 // ID группы для уведомлений
 const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID || "-5184781938";
@@ -19,7 +20,7 @@ function getAdmMainMenu() {
   return Markup.inlineKeyboard([
     [Markup.button.callback("📊 Статистика", "adm_stat")],
     [Markup.button.callback("🎁 Промокоды", "adm_promos"), Markup.button.callback("💳 Пополнения", "adm_payments")],
-    [Markup.button.callback("📈 Топ рефералов", "adm_topref")],
+    [Markup.button.callback("💰 Скидка", "adm_discount"), Markup.button.callback("📈 Топ рефералов", "adm_topref")],
     [Markup.button.callback("📋 Справка", "adm_help")],
   ]);
 }
@@ -362,6 +363,7 @@ function initAdminNotifier(bot) {
       `<code>/exporttopups</code> — выгрузка успешных пополнений в .xlsx\n\n` +
       `<code>/delpayment</code> <i>id</i> — удалить пополнение из БД\n\n` +
       `<code>/topref</code> — топ рефералов\n\n` +
+      `<code>/discount</code> — скидка (статус / off / % дата)\n\n` +
       `<code>/admmenu</code> — админ-меню с кнопками`;
     await ctx.reply(msg, { parse_mode: "HTML" });
   });
@@ -409,6 +411,28 @@ function initAdminNotifier(bot) {
     }
   });
 
+  bot.action("adm_discount", async (ctx) => {
+    if (String(ctx.chat?.id) !== ADMIN_GROUP_ID) return;
+    try {
+      await ctx.answerCbQuery();
+      const cfg = discount.getConfig();
+      const active = discount.isDiscountActive();
+      const end = new Date(cfg.endAt);
+      const d = String(end.getDate()).padStart(2, "0");
+      const m = String(end.getMonth() + 1).padStart(2, "0");
+      let msg = `💰 <b>Скидка</b>\n\n`;
+      msg += `Статус: ${active ? "✅ включена" : "❌ выключена"}\n`;
+      msg += `Процент: ${cfg.percent}%\n`;
+      msg += `До: 00:00 ${d}.${m}\n\n`;
+      msg += `<code>/discount off</code> — выключить\n`;
+      msg += `<code>/discount 20 11.02</code> — 20% до 00:00 11 февраля`;
+      await ctx.reply(msg, { parse_mode: "HTML" });
+    } catch (e) {
+      console.error("[ADMIN] adm_discount:", e);
+      await ctx.answerCbQuery("❌ Ошибка").catch(() => {});
+    }
+  });
+
   bot.action("adm_back", async (ctx) => {
     if (String(ctx.chat?.id) !== ADMIN_GROUP_ID) return;
     try {
@@ -432,6 +456,7 @@ function initAdminNotifier(bot) {
         `<code>/exporttopups</code> — выгрузка в .xlsx\n` +
         `<code>/delpayment</code> <i>id</i> — удалить пополнение\n` +
         `<code>/topref</code> — топ рефералов\n` +
+        `<code>/discount</code> — скидка\n` +
         `<code>/admmenu</code> — это меню`;
       await ctx.reply(msg, { parse_mode: "HTML" });
     } catch (e) {
@@ -1165,6 +1190,62 @@ ${isReusable ? "✅ Промокод многоразовый - можно ис�
       await ctx.reply(msg, { parse_mode: "HTML" });
     } catch (err) {
       console.error("[ADMIN] Error in /delpayment command:", err);
+      await ctx.reply(`❌ Ошибка: ${err.message}`);
+    }
+  });
+
+  // Команда /discount — просмотр, выключение или настройка скидки
+  bot.command("discount", async (ctx) => {
+    const chatId = String(ctx.chat.id);
+    if (chatId !== ADMIN_GROUP_ID) return;
+
+    const text = (ctx.message?.text || "").trim();
+    const parts = text.split(/\s+/).slice(1);
+
+    try {
+      if (parts.length === 0) {
+        const cfg = discount.getConfig();
+        const active = discount.isDiscountActive();
+        const end = new Date(cfg.endAt);
+        const d = String(end.getDate()).padStart(2, "0");
+        const m = String(end.getMonth() + 1).padStart(2, "0");
+        let msg = `💰 <b>Скидка</b>\n\n`;
+        msg += `Статус: ${active ? "✅ включена" : "❌ выключена"}\n`;
+        msg += `Процент: ${cfg.percent}%\n`;
+        msg += `До: 00:00 ${d}.${m}\n\n`;
+        msg += `Использование:\n`;
+        msg += `<code>/discount off</code> — выключить\n`;
+        msg += `<code>/discount 20 11.02</code> — 20% до 00:00 11 февраля`;
+        return ctx.reply(msg, { parse_mode: "HTML" });
+      }
+
+      if (parts[0].toLowerCase() === "off") {
+        discount.setConfig({ active: false });
+        return ctx.reply("✅ Скидка выключена.");
+      }
+
+      const percent = parseInt(parts[0], 10);
+      if (isNaN(percent) || percent < 0 || percent > 99) {
+        return ctx.reply("❌ Укажите процент 0–99: /discount 20 11.02");
+      }
+
+      const dateStr = parts[1];
+      if (!dateStr || !/^\d{1,2}\.\d{1,2}$/.test(dateStr)) {
+        return ctx.reply("❌ Укажите дату в формате ДД.ММ: /discount 20 11.02");
+      }
+
+      const [dd, mm] = dateStr.split(".").map((n) => parseInt(n, 10));
+      const now = new Date();
+      let year = now.getFullYear();
+      const endDate = new Date(year, mm - 1, dd, 0, 0, 0);
+      if (endDate <= now) year += 1;
+      const iso = `${year}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}T00:00:00+03:00`;
+      discount.setConfig({ active: true, percent, endAt: iso });
+      const d = String(dd).padStart(2, "0");
+      const m = String(mm).padStart(2, "0");
+      await ctx.reply(`✅ Скидка -${percent}% до 00:00 ${d}.${m}`);
+    } catch (err) {
+      console.error("[ADMIN] Error in /discount:", err);
       await ctx.reply(`❌ Ошибка: ${err.message}`);
     }
   });

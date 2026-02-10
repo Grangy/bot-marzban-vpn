@@ -20,7 +20,7 @@
     paymentSuccessMenu,
     getDisplayLabel,
     getPlanPrice,
-    DISCOUNT_BANNER,
+    getDiscountBanner,
     isDiscountActive,
     infoMenu,
     instructionsMenu,
@@ -329,7 +329,8 @@ bot.action(/^guide_video_(ios|android|android_tv|windows|macos)$/, async (ctx) =
 
       // Минимальная стоимость платного тарифа (с учётом скидки)
       const minPaidPrice = Math.min(getPlanPrice("M1"), getPlanPrice("M3"), getPlanPrice("M6"), getPlanPrice("M12"));
-      const discountLine = isDiscountActive() ? `\n${DISCOUNT_BANNER}\n` : "\n";
+      const banner = getDiscountBanner();
+      const discountLine = banner ? `\n${banner}\n` : "\n";
 
       // Если баланс меньше минимального тарифа — сразу предлагаем пополнение
       if ((user?.balance || 0) < minPaidPrice) {
@@ -340,7 +341,7 @@ bot.action(/^guide_video_(ios|android|android_tv|windows|macos)$/, async (ctx) =
         );
       }
 
-      const buyText = isDiscountActive() ? `Выберите подписку:\n\n${DISCOUNT_BANNER}` : "Выберите подписку:";
+      const buyText = getDiscountBanner() ? `Выберите подписку:\n\n${getDiscountBanner()}` : "Выберите подписку:";
       return editOrAnswer(ctx, buyText, buyMenu());
     });
 
@@ -370,9 +371,8 @@ bot.action("privacy", async (ctx) => {
 
 bot.action("balance_topup", async (ctx) => {
   await safeAnswerCbQuery(ctx);
-  const text = isDiscountActive()
-    ? `Выберите сумму пополнения:\n\n${DISCOUNT_BANNER}`
-    : "Выберите сумму пополнения:";
+  const banner = getDiscountBanner();
+  const text = banner ? `Выберите сумму пополнения:\n\n${banner}` : "Выберите сумму пополнения:";
   await editOrAnswer(ctx, text, topupMenu());
 });
 
@@ -424,11 +424,12 @@ bot.action("balance_refresh", async (ctx) => {
         const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
         const currentBalance = user?.balance || 0;
         const requiredAmount = price - currentBalance;
-        const discountLine = isDiscountActive() ? `\n${DISCOUNT_BANNER}\n` : "\n";
+        const banner2 = getDiscountBanner();
+        const discountLine2 = banner2 ? `\n${banner2}\n` : "\n";
 
         await editOrAnswer(
           ctx,
-          `💳 Для покупки подписки нужно пополнить баланс.\n\nТекущий баланс: ${ruMoney(currentBalance)}\nСтоимость подписки: ${ruMoney(price)}\nНеобходимо пополнить: ${ruMoney(requiredAmount)}${discountLine}\nВыберите сумму пополнения:`,
+          `💳 Для покупки подписки нужно пополнить баланс.\n\nТекущий баланс: ${ruMoney(currentBalance)}\nСтоимость подписки: ${ruMoney(price)}\nНеобходимо пополнить: ${ruMoney(requiredAmount)}${discountLine2}\nВыберите сумму пополнения:`,
           topupMenu(requiredAmount)
         );
         return;
@@ -716,9 +717,8 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
 
     buttons.push([Markup.button.callback("⬅️ Назад", `sub_${id}`)]);
 
-    const extendText = isDiscountActive()
-      ? `Выберите срок продления:\n\n${DISCOUNT_BANNER}`
-      : "Выберите срок продления:";
+    const bannerExt2 = getDiscountBanner();
+    const extendText = bannerExt2 ? `Выберите срок продления:\n\n${bannerExt2}` : "Выберите срок продления:";
     await editOrAnswer(ctx, extendText, Markup.inlineKeyboard(buttons));
   });
 
@@ -739,10 +739,11 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
     const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
     if (user.balance < price) {
       const requiredAmount = price - user.balance;
-      const discountLine = isDiscountActive() ? `\n${DISCOUNT_BANNER}\n` : "\n";
+      const bannerExt = getDiscountBanner();
+      const discountLineExt = bannerExt ? `\n${bannerExt}\n` : "\n";
       await editOrAnswer(
         ctx,
-        `💳 Для продления подписки нужно пополнить баланс.\n\nТекущий баланс: ${ruMoney(user.balance)}\nСтоимость продления: ${ruMoney(price)}\nНеобходимо пополнить: ${ruMoney(requiredAmount)}${discountLine}\nВыберите сумму пополнения:`,
+        `💳 Для продления подписки нужно пополнить баланс.\n\nТекущий баланс: ${ruMoney(user.balance)}\nСтоимость продления: ${ruMoney(price)}\nНеобходимо пополнить: ${ruMoney(requiredAmount)}${discountLineExt}\nВыберите сумму пополнения:`,
         topupMenu(requiredAmount)
       );
       return;
