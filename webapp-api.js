@@ -3,7 +3,7 @@ const crypto = require("crypto");
 const { prisma } = require("./db");
 const { createInvoice } = require("./payment");
 const { createMarzbanUserOnBothServers } = require("./marzban-utils");
-const { PLANS } = require("./menus");
+const { PLANS, getPlanPrice, getTopupAmounts, DISCOUNT_BANNER, isDiscountActive } = require("./menus");
 
 // Секретный ключ для API (должен быть в .env)
 const WEBAPP_SECRET = process.env.WEBAPP_SECRET || "maxgroot_webapp_secret_key_2026";
@@ -743,18 +743,23 @@ function registerWebAppAPI(app) {
 
     const plans = Object.entries(PLANS)
       .filter(([key]) => key !== "PROMO_10D" && key !== "FREE")
-      .map(([key, plan]) => ({
-        id: key,
-        label: plan.label,
-        price: plan.price,
-        months: plan.months,
-        pricePerMonth: Math.round(plan.price / plan.months),
-        buyUrl: `${baseUrl}?start=plan_${key}`
-      }));
+      .map(([key, plan]) => {
+        const price = getPlanPrice(key);
+        return {
+          id: key,
+          label: plan.label,
+          price,
+          months: plan.months,
+          pricePerMonth: Math.round(price / plan.months),
+          buyUrl: `${baseUrl}?start=plan_${key}`,
+          discountBanner: isDiscountActive() ? DISCOUNT_BANNER : null,
+        };
+      });
 
     res.json({
       ok: true,
-      data: plans
+      data: plans,
+      discountBanner: isDiscountActive() ? DISCOUNT_BANNER : null,
     });
   });
 
@@ -966,6 +971,8 @@ function registerWebAppAPI(app) {
         });
       }
 
+      const price = getPlanPrice(planId);
+
       const mainUser = await getMainUser(telegramId);
       if (!mainUser) {
         return res.status(404).json({ 
@@ -985,25 +992,25 @@ function registerWebAppAPI(app) {
         });
       }
 
-      if (user.balance < plan.price) {
+      if (user.balance < price) {
         return res.status(400).json({ 
           ok: false, 
           error: "INSUFFICIENT_BALANCE",
           message: "Недостаточно средств на балансе",
           data: {
             balance: user.balance,
-            required: plan.price,
-            shortage: plan.price - user.balance
+            required: price,
+            shortage: price - user.balance
           }
         });
       }
 
-      // Транзакция: списываем баланс + создаем подписку
+      // Транзакция: списываем баланс + создаем подписку (с учётом скидки)
       const result = await prisma.$transaction(async (tx) => {
         // Списываем баланс
         await tx.user.update({
           where: { id: user.id },
-          data: { balance: { decrement: plan.price } }
+          data: { balance: { decrement: price } }
         });
 
         // Вычисляем дату окончания
@@ -1072,7 +1079,7 @@ function registerWebAppAPI(app) {
             subscriptionUrl2: updatedSub.subscriptionUrl2
           },
           newBalance: updatedUser.balance,
-          charged: plan.price
+          charged: price
         }
       });
     } catch (error) {

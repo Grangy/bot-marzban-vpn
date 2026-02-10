@@ -17,8 +17,11 @@
     mainMenu,
     buyMenu,
     topupMenu,
-    paymentSuccessMenu, // 👈 новая функция
-    getDisplayLabel, // 👈 добавляем
+    paymentSuccessMenu,
+    getDisplayLabel,
+    getPlanPrice,
+    DISCOUNT_BANNER,
+    isDiscountActive,
     infoMenu,
     instructionsMenu,
   } = require("./menus");
@@ -324,22 +327,21 @@ bot.action(/^guide_video_(ios|android|android_tv|windows|macos)$/, async (ctx) =
 
       const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
 
-      // Минимальная стоимость платного тарифа (M1/M3/M6/M12)
-      const paidPrices = Object.values(PLANS)
-        .map((p) => p?.price)
-        .filter((p) => typeof p === "number" && p > 0);
-      const minPaidPrice = paidPrices.length ? Math.min(...paidPrices) : 0;
+      // Минимальная стоимость платного тарифа (с учётом скидки)
+      const minPaidPrice = Math.min(getPlanPrice("M1"), getPlanPrice("M3"), getPlanPrice("M6"), getPlanPrice("M12"));
+      const discountLine = isDiscountActive() ? `\n${DISCOUNT_BANNER}\n` : "\n";
 
       // Если баланс меньше минимального тарифа — сразу предлагаем пополнение
       if ((user?.balance || 0) < minPaidPrice) {
         return editOrAnswer(
           ctx,
-          `💳 Для покупки подписки нужно пополнить баланс.\n\nТекущий баланс: ${ruMoney(user?.balance || 0)}\nМинимальная подписка: ${ruMoney(minPaidPrice)}\n\nВыберите сумму пополнения:`,
+          `💳 Для покупки подписки нужно пополнить баланс.\n\nТекущий баланс: ${ruMoney(user?.balance || 0)}\nМинимальная подписка: ${ruMoney(minPaidPrice)}${discountLine}\nВыберите сумму пополнения:`,
           topupMenu()
         );
       }
 
-      return editOrAnswer(ctx, "Выберите подписку:", buyMenu());
+      const buyText = isDiscountActive() ? `Выберите подписку:\n\n${DISCOUNT_BANNER}` : "Выберите подписку:";
+      return editOrAnswer(ctx, buyText, buyMenu());
     });
 
     // Покупка конкретного плана
@@ -368,7 +370,9 @@ bot.action("privacy", async (ctx) => {
 
 bot.action("balance_topup", async (ctx) => {
   await safeAnswerCbQuery(ctx);
-  const text = "Выберите сумму пополнения:";
+  const text = isDiscountActive()
+    ? `Выберите сумму пополнения:\n\n${DISCOUNT_BANNER}`
+    : "Выберите сумму пополнения:";
   await editOrAnswer(ctx, text, topupMenu());
 });
 
@@ -387,13 +391,14 @@ bot.action("balance_refresh", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     const planKey = ctx.match[1];
     const plan = PLANS[planKey];
+    const price = getPlanPrice(planKey);
 
     try {
       const result = await prisma.$transaction(async (tx) => {
-        // 1) списание денег
+        // 1) списание денег (с учётом скидки)
         const dec = await tx.user.updateMany({
-          where: { id: ctx.dbUser.id, balance: { gte: plan.price } },
-          data: { balance: { decrement: plan.price } },
+          where: { id: ctx.dbUser.id, balance: { gte: price } },
+          data: { balance: { decrement: price } },
         });
         if (dec.count === 0) {
           return { ok: false, reason: "Недостаточно средств" };
@@ -418,11 +423,12 @@ bot.action("balance_refresh", async (ctx) => {
         // Получаем актуальный баланс пользователя
         const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
         const currentBalance = user?.balance || 0;
-        const requiredAmount = plan.price - currentBalance;
-        
+        const requiredAmount = price - currentBalance;
+        const discountLine = isDiscountActive() ? `\n${DISCOUNT_BANNER}\n` : "\n";
+
         await editOrAnswer(
           ctx,
-          `💳 Для покупки подписки нужно пополнить баланс.\n\nТекущий баланс: ${ruMoney(currentBalance)}\nСтоимость подписки: ${ruMoney(plan.price)}\nНеобходимо пополнить: ${ruMoney(requiredAmount)}\n\nВыберите сумму пополнения:`,
+          `💳 Для покупки подписки нужно пополнить баланс.\n\nТекущий баланс: ${ruMoney(currentBalance)}\nСтоимость подписки: ${ruMoney(price)}\nНеобходимо пополнить: ${ruMoney(requiredAmount)}${discountLine}\nВыберите сумму пополнения:`,
           topupMenu(requiredAmount)
         );
         return;
@@ -701,13 +707,19 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
       return;
     }
 
-    const buttons = Object.values(PLANS).map((plan) => {
-      return [Markup.button.callback(`${plan.label} — ${ruMoney(plan.price)}`, `extend_${id}_${plan.type}`)];
+    const paidPlanKeys = ["M1", "M3", "M6", "M12"];
+    const buttons = paidPlanKeys.map((key) => {
+      const plan = PLANS[key];
+      const price = getPlanPrice(key);
+      return [Markup.button.callback(`${plan.label} — ${ruMoney(price)}`, `extend_${id}_${plan.type}`)];
     });
 
     buttons.push([Markup.button.callback("⬅️ Назад", `sub_${id}`)]);
 
-    await editOrAnswer(ctx, "Выберите срок продления:", Markup.inlineKeyboard(buttons));
+    const extendText = isDiscountActive()
+      ? `Выберите срок продления:\n\n${DISCOUNT_BANNER}`
+      : "Выберите срок продления:";
+    await editOrAnswer(ctx, extendText, Markup.inlineKeyboard(buttons));
   });
 
   // Продление подписки на выбранный срок
@@ -716,6 +728,7 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
     const id = parseInt(ctx.match[1], 10);
     const planKey = ctx.match[2];
     const plan = PLANS[planKey];
+    const price = getPlanPrice(planKey);
 
     const sub = await prisma.subscription.findUnique({ where: { id } });
     if (!sub || sub.userId !== ctx.dbUser.id) {
@@ -724,11 +737,12 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
     }
 
     const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
-    if (user.balance < plan.price) {
-      const requiredAmount = plan.price - user.balance;
+    if (user.balance < price) {
+      const requiredAmount = price - user.balance;
+      const discountLine = isDiscountActive() ? `\n${DISCOUNT_BANNER}\n` : "\n";
       await editOrAnswer(
         ctx,
-        `💳 Для продления подписки нужно пополнить баланс.\n\nТекущий баланс: ${ruMoney(user.balance)}\nСтоимость продления: ${ruMoney(plan.price)}\nНеобходимо пополнить: ${ruMoney(requiredAmount)}\n\nВыберите сумму пополнения:`,
+        `💳 Для продления подписки нужно пополнить баланс.\n\nТекущий баланс: ${ruMoney(user.balance)}\nСтоимость продления: ${ruMoney(price)}\nНеобходимо пополнить: ${ruMoney(requiredAmount)}${discountLine}\nВыберите сумму пополнения:`,
         topupMenu(requiredAmount)
       );
       return;
@@ -742,7 +756,7 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
       const updated = await prisma.$transaction(async (tx) => {
         await tx.user.update({
           where: { id: ctx.dbUser.id },
-          data: { balance: { decrement: plan.price } },
+          data: { balance: { decrement: price } },
         });
 return tx.subscription.update({
   where: { id },
@@ -777,7 +791,7 @@ return tx.subscription.update({
         }
       }
 
-      const newBalance = user.balance - plan.price;
+      const newBalance = user.balance - price;
 
       await editOrAnswer(
         ctx,

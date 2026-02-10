@@ -2,6 +2,26 @@ const {
   Markup
 } = require("telegraf");
 
+// Скидка -20% до 00:00 11 февраля (МСК)
+const DISCOUNT_END = new Date("2026-02-11T00:00:00+03:00");
+const DISCOUNT_PERCENT = 20;
+const DISCOUNT_BANNER = "🔥 Скидка -20% до 00:00 11 февраля";
+
+function isDiscountActive() {
+  return new Date() < DISCOUNT_END;
+}
+
+function getPlanPrice(planKey) {
+  const plan = PLANS[planKey];
+  if (!plan || !plan.price) return 0;
+  return isDiscountActive() ? Math.round(plan.price * (1 - DISCOUNT_PERCENT / 100)) : plan.price;
+}
+
+function getTopupAmounts() {
+  if (!isDiscountActive()) return TOPUP_AMOUNTS;
+  return TOPUP_AMOUNTS.map((a) => Math.round(a * (1 - DISCOUNT_PERCENT / 100)));
+}
+
 const PLANS = {
   M1: {
     label: "1 месяц",
@@ -124,11 +144,15 @@ function mainMenu(balanceRub = 0) {
 
 
 function buyMenu() {
+  const p1 = getPlanPrice("M1");
+  const p3 = getPlanPrice("M3");
+  const p6 = getPlanPrice("M6");
+  const p12 = getPlanPrice("M12");
   return Markup.inlineKeyboard([
-    [Markup.button.callback(`${PLANS.M1.label} — ${ruMoney(PLANS.M1.price)}`, "buy_M1")],
-    [Markup.button.callback(`${PLANS.M3.label} — ${ruMoney(PLANS.M3.price)}`, "buy_M3")],
-    [Markup.button.callback(`${PLANS.M6.label} — ${ruMoney(PLANS.M6.price)}`, "buy_M6")],
-    [Markup.button.callback(`${PLANS.M12.label} — ${ruMoney(PLANS.M12.price)}`, "buy_M12")],
+    [Markup.button.callback(`${PLANS.M1.label} — ${ruMoney(p1)}`, "buy_M1")],
+    [Markup.button.callback(`${PLANS.M3.label} — ${ruMoney(p3)}`, "buy_M3")],
+    [Markup.button.callback(`${PLANS.M6.label} — ${ruMoney(p6)}`, "buy_M6")],
+    [Markup.button.callback(`${PLANS.M12.label} — ${ruMoney(p12)}`, "buy_M12")],
     [Markup.button.callback("⬅️ Назад", "back")],
   ]);
 }
@@ -137,8 +161,9 @@ function buyMenu() {
 function planSelectedMenu(planKey) {
   const plan = PLANS[planKey];
   if (!plan) return mainMenu(0);
+  const price = getPlanPrice(planKey);
   return Markup.inlineKeyboard([
-    [Markup.button.callback(`🛒 Приобрести — ${ruMoney(plan.price)}`, `buy_${planKey}`)],
+    [Markup.button.callback(`🛒 Приобрести — ${ruMoney(price)}`, `buy_${planKey}`)],
     [Markup.button.callback("📋 Другие тарифы", "buy")],
     [Markup.button.callback("⬅️ В меню", "back")],
   ]);
@@ -156,19 +181,20 @@ function balanceMenu(balanceRub = 0) {
 
 function topupMenu(requiredAmount = null) {
   const buttons = [];
-  
+  const amounts = getTopupAmounts();
+
   // Если указана нужная сумма и её нет в стандартных - добавляем кнопку с нужной суммой
-  if (requiredAmount && requiredAmount > 0 && !TOPUP_AMOUNTS.includes(requiredAmount)) {
+  if (requiredAmount && requiredAmount > 0 && !amounts.includes(requiredAmount)) {
     buttons.push([Markup.button.callback(`💰 Пополнить на ${ruMoney(requiredAmount)}`, `topup_${requiredAmount}`)]);
   }
-  
-  // Стандартные суммы
-  TOPUP_AMOUNTS.forEach(amount => {
+
+  // Стандартные суммы (с учётом скидки)
+  amounts.forEach((amount) => {
     buttons.push([Markup.button.callback(`+ ${ruMoney(amount)}`, `topup_${amount}`)]);
   });
-  
+
   buttons.push([Markup.button.callback("⬅️ Назад", "back")]);
-  
+
   return Markup.inlineKeyboard(buttons);
 }
 
@@ -182,6 +208,10 @@ function paymentSuccessMenu() {
 module.exports = {
   PLANS,
   TOPUP_AMOUNTS,
+  isDiscountActive,
+  getPlanPrice,
+  getTopupAmounts,
+  DISCOUNT_BANNER,
   ruMoney,
   formatDate,
   calcEndDate,
