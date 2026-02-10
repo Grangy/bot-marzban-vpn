@@ -214,6 +214,7 @@ module.exports = {
   PLANS,
   TOPUP_AMOUNTS,
   isDiscountActive,
+  getDiscountBanner,
   getPlanPrice,
   getTopupAmounts,
   ruMoney,
