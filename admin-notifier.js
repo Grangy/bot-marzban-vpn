@@ -1,7 +1,7 @@
 // admin-notifier.js - Уведомления о транзакциях в админ-группу + статистика
 const bus = require("./events");
 const { prisma } = require("./db");
-const { ruMoney } = require("./menus");
+const { ruMoney, cb } = require("./menus");
 const { markTopupSuccessAndCredit } = require("./payment");
 const { Markup } = require("telegraf");
 const crypto = require("crypto");
@@ -18,31 +18,31 @@ const admState = new Map();
 
 function getAdmMainMenu() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback("📊 Статистика", "adm_stat")],
-    [Markup.button.callback("🎁 Промокоды", "adm_promos"), Markup.button.callback("💳 Пополнения", "adm_payments")],
-    [Markup.button.callback("💰 Скидка", "adm_discount"), Markup.button.callback("📈 Топ рефералов", "adm_topref")],
-    [Markup.button.callback("📋 Справка", "adm_help")],
+    [cb("📊 Статистика", "adm_stat", "primary")],
+    [cb("🎁 Промокоды", "adm_promos", "primary"), cb("💳 Пополнения", "adm_payments", "primary")],
+    [cb("💰 Скидка", "adm_discount"), cb("📈 Топ рефералов", "adm_topref")],
+    [cb("📋 Справка", "adm_help")],
   ]);
 }
 
 function getAdmPromosMenu() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback("➕ На баланс", "adm_create_balance"), Markup.button.callback("➕ На дни", "adm_create_days")],
-    [Markup.button.callback("📋 Список промокодов", "adm_promos_list")],
-    [Markup.button.callback("⬅️ Назад", "adm_back")],
+    [cb("➕ На баланс", "adm_create_balance", "success"), cb("➕ На дни", "adm_create_days", "success")],
+    [cb("📋 Список промокодов", "adm_promos_list", "primary")],
+    [cb("⬅️ Назад", "adm_back")],
   ]);
 }
 
 function getAdmPaymentMenu() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback("📋 5 последних", "adm_payment_list"), Markup.button.callback("📥 Выгрузка .xlsx", "adm_export_topups")],
-    [Markup.button.callback("✅ Одобрить по ID", "adm_payment_approve"), Markup.button.callback("🗑 Удалить по ID", "adm_delpayment")],
-    [Markup.button.callback("⬅️ Назад", "adm_back")],
+    [cb("📋 5 последних", "adm_payment_list", "primary"), cb("📥 Выгрузка .xlsx", "adm_export_topups", "primary")],
+    [cb("✅ Одобрить по ID", "adm_payment_approve", "success"), cb("🗑 Удалить по ID", "adm_delpayment", "danger")],
+    [cb("⬅️ Назад", "adm_back")],
   ]);
 }
 
 function admCancelKeyboard() {
-  return Markup.inlineKeyboard([[Markup.button.callback("❌ Отмена", "adm_cancel")]]);
+  return Markup.inlineKeyboard([[cb("❌ Отмена", "adm_cancel", "danger")]]);
 }
 
 /**

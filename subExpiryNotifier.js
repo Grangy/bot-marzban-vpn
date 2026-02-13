@@ -1,7 +1,7 @@
 // subExpiryNotifier.js
 const { prisma } = require("./db");
 const { Markup } = require("telegraf");
-const { formatDate, getDisplayLabel } = require("./menus");
+const { formatDate, getDisplayLabel, cb } = require("./menus");
 
 function daysDiffCeil(a, b) {
   const ms = b.getTime() - a.getTime();
@@ -44,7 +44,7 @@ function startSubExpiryNotifier(bot) {
             `⏰ Через 3 дня заканчивается подписка (${getDisplayLabel(s)} до ${formatDate(end)}).\n` +
             `Продлите, чтобы не потерять доступ.`;
           const kb = Markup.inlineKeyboard([
-            [Markup.button.callback("🔄 Продлить", `extend_choose_${s.id}`)],
+            [cb("🔄 Продлить", `extend_choose_${s.id}`, "success")],
           ]);
           try {
             await bot.telegram.sendMessage(chatId, text, kb);

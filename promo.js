@@ -2,7 +2,7 @@
 // Использует promo-manager.js для логики активации
 const { prisma } = require("./db");
 const { Markup } = require("telegraf");
-const { promoMenu, ruMoney, instructionsMenu, mainMenu } = require("./menus");
+const { promoMenu, ruMoney, instructionsMenu, mainMenu, cb, urlBtn } = require("./menus");
 const { activatePromoCode, getUserPromoStats, PROMO_TYPES } = require("./promo-manager");
 const { getReferralStats } = require("./referral-bonus");
 
@@ -151,10 +151,10 @@ function registerPromo(bot) {
     const shareUrl = shareLink(shareMessage);
 
     const kb = Markup.inlineKeyboard([
-      [Markup.button.url("🔗 Поделиться промокодом", shareUrl)],
-      [Markup.button.callback(`📋 Показать код для копирования`, `promo_copy_${me.promoCode}`)],
-      [Markup.button.callback("🎁 Активировать чужой промокод", "promo_activate")],
-      [Markup.button.callback("⬅️ Назад", "back")],
+      [urlBtn("🔗 Поделиться промокодом", shareUrl, "primary")],
+      [cb(`📋 Показать код для копирования`, `promo_copy_${me.promoCode}`, "primary")],
+      [cb("🎁 Активировать чужой промокод", "promo_activate", "primary")],
+      [cb("⬅️ Назад", "back")],
     ]);
 
     await ctx.replyWithMarkdown(msg, kb);
@@ -235,21 +235,21 @@ function registerPromo(bot) {
       
       if (result.subscriptionUrl || result.subscriptionUrl2) {
         if (result.subscriptionUrl) {
-          buttons.push([Markup.button.url("🔗 Подключить", result.subscriptionUrl)]);
+          buttons.push([urlBtn("🔗 Подключить", result.subscriptionUrl, "success")]);
         }
         if (result.subscriptionUrl2) {
-          buttons.push([Markup.button.url("🔗 Подключить 2 (МТС, Миранда)", result.subscriptionUrl2)]);
+          buttons.push([urlBtn("🔗 Подключить 2 (МТС, Миранда)", result.subscriptionUrl2, "success")]);
         }
       }
       
       if (result.type === PROMO_TYPES.ADMIN_BALANCE) {
-        buttons.push([Markup.button.callback("🛒 Купить подписку", "buy")]);
+        buttons.push([cb("🛒 Купить подписку", "buy", "primary")]);
       }
       
       buttons.push(
-        [Markup.button.callback("📦 Мои подписки", "my_subs")],
-        [Markup.button.callback("📖 Инструкции", "instructions")],
-        [Markup.button.callback("⬅️ В меню", "back")]
+        [cb("📦 Мои подписки", "my_subs")],
+        [cb("📖 Инструкции", "instructions", "primary")],
+        [cb("⬅️ В меню", "back")]
       );
       
       const keyboard = Markup.inlineKeyboard(buttons);
@@ -290,21 +290,21 @@ function registerPromo(bot) {
       
       if (result.subscriptionUrl || result.subscriptionUrl2) {
         if (result.subscriptionUrl) {
-          buttons.push([Markup.button.url("🔗 Подключить", result.subscriptionUrl)]);
+          buttons.push([urlBtn("🔗 Подключить", result.subscriptionUrl, "success")]);
         }
         if (result.subscriptionUrl2) {
-          buttons.push([Markup.button.url("🔗 Подключить 2 (МТС, Миранда)", result.subscriptionUrl2)]);
+          buttons.push([urlBtn("🔗 Подключить 2 (МТС, Миранда)", result.subscriptionUrl2, "success")]);
         }
       }
       
       if (result.type === PROMO_TYPES.ADMIN_BALANCE) {
-        buttons.push([Markup.button.callback("🛒 Купить подписку", "buy")]);
+        buttons.push([cb("🛒 Купить подписку", "buy", "primary")]);
       }
       
       buttons.push(
-        [Markup.button.callback("📦 Мои подписки", "my_subs")],
-        [Markup.button.callback("📖 Инструкции", "instructions")],
-        [Markup.button.callback("⬅️ В меню", "back")]
+        [cb("📦 Мои подписки", "my_subs")],
+        [cb("📖 Инструкции", "instructions", "primary")],
+        [cb("⬅️ В меню", "back")]
       );
       
       const keyboard = Markup.inlineKeyboard(buttons);

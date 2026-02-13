@@ -1,8 +1,19 @@
-const {
-  Markup
-} = require("telegraf");
-
+const { Markup } = require("telegraf");
 const discount = require("./discount");
+
+/** Bot API 9.4: кнопки со стилями (primary=синий, success=зелёный, danger=красный) */
+function cb(text, data, style) {
+  const b = Markup.button.callback(text, data);
+  return style ? { ...b, style } : b;
+}
+function urlBtn(text, url, style) {
+  const b = Markup.button.url(text, url);
+  return style ? { ...b, style } : b;
+}
+function webAppBtn(text, url, style) {
+  const b = Markup.button.webApp(text, url);
+  return style ? { ...b, style } : b;
+}
 
 function isDiscountActive() {
   return discount.isDiscountActive();
@@ -100,50 +111,37 @@ return PLANS[sub.type]?.label || sub.type;
 
 function infoMenu(balanceRub = 0) {
   return Markup.inlineKeyboard([
-    [Markup.button.callback("📄 Пользовательское соглашение", "tos")],
-    [Markup.button.callback("🔒 Политика конфиденциальности", "privacy")],
-    [Markup.button.callback("⬅️ Назад", "back")],
+    [cb("📄 Пользовательское соглашение", "tos")],
+    [cb("🔒 Политика конфиденциальности", "privacy")],
+    [cb("⬅️ Назад", "back")],
   ]);
 }
 
 function instructionsMenu() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback("🍎 iPhone (iOS)", "guide_ios")],
-    [Markup.button.callback("📱 Android", "guide_android")],
-    [Markup.button.callback("📺 Android TV", "guide_android_tv")],
-    [Markup.button.callback("💻 Windows", "guide_windows")],
-    [Markup.button.callback("🖥️ macOS", "guide_macos")],
-    [Markup.button.callback("⬅️ Назад", "back")],
+    [cb("🍎 iPhone (iOS)", "guide_ios", "primary")],
+    [cb("📱 Android", "guide_android", "primary")],
+    [cb("📺 Android TV", "guide_android_tv")],
+    [cb("💻 Windows", "guide_windows", "primary")],
+    [cb("🖥️ macOS", "guide_macos", "primary")],
+    [cb("⬅️ Назад", "back")],
   ]);
 }
 
 function promoMenu() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback("🎁 Активировать чужой промокод", "promo_activate")],
-    [Markup.button.callback("⬅️ Назад", "back")],
+    [cb("🎁 Активировать чужой промокод", "promo_activate", "primary")],
+    [cb("⬅️ Назад", "back")],
   ]);
 }
 
 function mainMenu(balanceRub = 0) {
   return Markup.inlineKeyboard([
-    [
-      Markup.button.webApp("📱 Открыть приложение", "https://web.grangy.ru/")
-    ],
-    [
-      Markup.button.callback("📦 Мои подписки", "my_subs"),
-      Markup.button.callback("💳 Купить подписку", "buy")
-    ],
-    [
-      Markup.button.callback(`💼 Баланс: ${ruMoney(balanceRub)}`, "balance"),
-      Markup.button.callback("🎁 Промокод", "promo")
-    ],
-    [
-      Markup.button.callback("📖 Инструкции", "instructions"),
-      Markup.button.callback("📋 Информация", "info")
-    ],
-    [
-      Markup.button.url("🛠 Тех.поддержка", "https://t.me/supmaxgroot")
-    ],
+    [webAppBtn("📱 Открыть приложение", "https://web.grangy.ru/", "primary")],
+    [cb("📦 Мои подписки", "my_subs"), cb("💳 Купить подписку", "buy", "primary")],
+    [cb(`💼 Баланс: ${ruMoney(balanceRub)}`, "balance"), cb("🎁 Промокод", "promo")],
+    [cb("📖 Инструкции", "instructions"), cb("📋 Информация", "info")],
+    [urlBtn("🛠 Тех.поддержка", "https://t.me/supmaxgroot", "primary")],
   ]);
 }
 
@@ -154,11 +152,11 @@ function buyMenu() {
   const p6 = getPlanPrice("M6");
   const p12 = getPlanPrice("M12");
   return Markup.inlineKeyboard([
-    [Markup.button.callback(`${PLANS.M1.label} — ${ruMoney(p1)}`, "buy_M1")],
-    [Markup.button.callback(`${PLANS.M3.label} — ${ruMoney(p3)}`, "buy_M3")],
-    [Markup.button.callback(`${PLANS.M6.label} — ${ruMoney(p6)}`, "buy_M6")],
-    [Markup.button.callback(`${PLANS.M12.label} — ${ruMoney(p12)}`, "buy_M12")],
-    [Markup.button.callback("⬅️ Назад", "back")],
+    [cb(`${PLANS.M1.label} — ${ruMoney(p1)}`, "buy_M1", "primary")],
+    [cb(`${PLANS.M3.label} — ${ruMoney(p3)}`, "buy_M3", "primary")],
+    [cb(`${PLANS.M6.label} — ${ruMoney(p6)}`, "buy_M6", "primary")],
+    [cb(`${PLANS.M12.label} — ${ruMoney(p12)}`, "buy_M12", "primary")],
+    [cb("⬅️ Назад", "back")],
   ]);
 }
 
@@ -168,18 +166,17 @@ function planSelectedMenu(planKey) {
   if (!plan) return mainMenu(0);
   const price = getPlanPrice(planKey);
   return Markup.inlineKeyboard([
-    [Markup.button.callback(`🛒 Приобрести — ${ruMoney(price)}`, `buy_${planKey}`)],
-    [Markup.button.callback("📋 Другие тарифы", "buy")],
-    [Markup.button.callback("⬅️ В меню", "back")],
+    [cb(`🛒 Приобрести — ${ruMoney(price)}`, `buy_${planKey}`, "primary")],
+    [cb("📋 Другие тарифы", "buy")],
+    [cb("⬅️ В меню", "back")],
   ]);
 }
 
 function balanceMenu(balanceRub = 0) {
   return Markup.inlineKeyboard([
-    [Markup.button.callback(`💼 Баланс: ${ruMoney(balanceRub)}`, "balance_refresh")],
-    [Markup.button.callback("➕ Пополнить", "balance_topup")],
-    [Markup.button.callback("🎁 Промокод", "promo")],   // 👈 новая кнопка
-    [Markup.button.callback("⬅️ Назад", "back")],
+    [cb(`💼 Баланс: ${ruMoney(balanceRub)}`, "balance_refresh")],
+    [cb("➕ Пополнить", "balance_topup", "primary"), cb("🎁 Промокод", "promo")],
+    [cb("⬅️ Назад", "back")],
   ]);
 }
 
@@ -190,27 +187,28 @@ function topupMenu(requiredAmount = null) {
 
   // Если указана нужная сумма и её нет в стандартных - добавляем кнопку с нужной суммой
   if (requiredAmount && requiredAmount > 0 && !amounts.includes(requiredAmount)) {
-    buttons.push([Markup.button.callback(`💰 Пополнить на ${ruMoney(requiredAmount)}`, `topup_${requiredAmount}`)]);
+    buttons.push([cb(`💰 Пополнить на ${ruMoney(requiredAmount)}`, `topup_${requiredAmount}`, "primary")]);
   }
 
-  // Стандартные суммы (с учётом скидки)
   amounts.forEach((amount) => {
-    buttons.push([Markup.button.callback(`+ ${ruMoney(amount)}`, `topup_${amount}`)]);
+    buttons.push([cb(`+ ${ruMoney(amount)}`, `topup_${amount}`, "primary")]);
   });
 
-  buttons.push([Markup.button.callback("⬅️ Назад", "back")]);
+  buttons.push([cb("⬅️ Назад", "back")]);
 
   return Markup.inlineKeyboard(buttons);
 }
 
 function paymentSuccessMenu() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback("🚀 Активировать VPN", "buy")],
-    [Markup.button.callback("📖 Инструкции по настройке", "instructions")],
+    [cb("🚀 Активировать VPN", "buy", "success"), cb("📖 Инструкции по настройке", "instructions", "primary")],
   ]);
 }
 
 module.exports = {
+  cb,
+  urlBtn,
+  webAppBtn,
   PLANS,
   TOPUP_AMOUNTS,
   isDiscountActive,

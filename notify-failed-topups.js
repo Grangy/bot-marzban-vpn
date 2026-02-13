@@ -6,6 +6,7 @@ require("dotenv").config();
 const { Telegraf } = require("telegraf");
 const { prisma } = require("./db");
 const { Markup } = require("telegraf");
+const { cb } = require("./menus");
 
 const DRY_RUN = !process.argv.includes("--send");
 
@@ -147,7 +148,7 @@ async function main() {
       
       try {
         const keyboard = Markup.inlineKeyboard([
-          [Markup.button.callback("💼 Баланс", "balance"), Markup.button.callback("💳 Пополнить", "balance_topup")]
+          [cb("💼 Баланс", "balance"), cb("💳 Пополнить", "balance_topup", "primary")]
         ]);
 
         await bot.telegram.sendMessage(user.chatId, MESSAGE, {

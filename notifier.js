@@ -1,7 +1,7 @@
 // notifier.js
 const bus = require("./events");
 const { prisma } = require("./db");
-const { ruMoney, instructionsMenu, paymentSuccessMenu } = require("./menus");
+const { ruMoney, instructionsMenu, paymentSuccessMenu, cb } = require("./menus");
 const { Markup } = require("telegraf");
 
 /**
@@ -61,9 +61,8 @@ bus.on("topup.timeout", async ({ topupId }) => {
 Жду ответа! 😊`;
 
     const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback("💳 Пополнить баланс", "balance_topup")],
-      [Markup.button.callback("🛒 Купить подписку", "buy")],
-      [Markup.button.callback("📖 Инструкции", "instructions")]
+      [cb("💳 Пополнить баланс", "balance_topup", "primary"), cb("🛒 Купить подписку", "buy", "primary")],
+      [cb("📖 Инструкции", "instructions", "primary")]
     ]);
 
     await bot.telegram.sendMessage(user.chatId, text, keyboard);
@@ -102,9 +101,8 @@ bus.on("topup.timeout", async ({ topupId }) => {
 Жду ответа! 😊`;
 
       const keyboard = Markup.inlineKeyboard([
-        [Markup.button.callback("💳 Пополнить баланс", "balance_topup")],
-        [Markup.button.callback("🛒 Купить подписку", "buy")],
-        [Markup.button.callback("📖 Инструкции", "instructions")]
+        [cb("💳 Пополнить баланс", "balance_topup", "primary"), cb("🛒 Купить подписку", "buy", "primary")],
+        [cb("📖 Инструкции", "instructions", "primary")]
       ]);
 
       await bot.telegram.sendMessage(user.chatId, text, keyboard);

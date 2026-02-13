@@ -90,7 +90,7 @@ function registerBroadcastAPI(app) {
       let keyboard = null;
       if (hasWebAppButton) {
         keyboard = Markup.inlineKeyboard([
-          [Markup.button.webApp("📱 Открыть приложение", "https://web.grangy.ru/")]
+          [require("./menus").webAppBtn("📱 Открыть приложение", "https://web.grangy.ru/", "primary")]
         ]).reply_markup;
       }
 

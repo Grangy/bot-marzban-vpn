@@ -24,6 +24,8 @@
     isDiscountActive,
     infoMenu,
     instructionsMenu,
+    cb,
+    urlBtn,
   } = require("./menus");
   const MARZBAN_API_URL = process.env.MARZBAN_API_URL;
   const { createMarzbanUserOnBothServers, extendMarzbanUserOnBothServers } = require("./marzban-utils");
@@ -221,18 +223,16 @@ const APP_DOWNLOAD_LINKS = {
 function deviceInstructionMenu(deviceType) {
   const buttons = [];
   
-  // Ссылка на скачивание приложения
   if (deviceType === 'android_tv') {
-    // Для Android TV две ссылки
-    buttons.push([Markup.button.url("📥 Скачать Happ (Google Play)", APP_DOWNLOAD_LINKS.android_tv_play)]);
-    buttons.push([Markup.button.url("📥 Скачать Happ (APK)", APP_DOWNLOAD_LINKS.android_tv_apk)]);
+    buttons.push([urlBtn("📥 Скачать Happ (Google Play)", APP_DOWNLOAD_LINKS.android_tv_play, "primary")]);
+    buttons.push([urlBtn("📥 Скачать Happ (APK)", APP_DOWNLOAD_LINKS.android_tv_apk, "primary")]);
   } else {
-    buttons.push([Markup.button.url("📥 Скачать Happ", APP_DOWNLOAD_LINKS[deviceType])]);
+    buttons.push([urlBtn("📥 Скачать Happ", APP_DOWNLOAD_LINKS[deviceType], "primary")]);
   }
   
-  buttons.push([Markup.button.callback("📹 Видео-инструкция", `guide_video_${deviceType}`)]);
-  buttons.push([Markup.button.callback("⬅️ Назад к выбору устройства", "instructions")]);
-  buttons.push([Markup.button.callback("⬅️ В меню", "back")]);
+  buttons.push([cb("📹 Видео-инструкция", `guide_video_${deviceType}`, "primary")]);
+  buttons.push([cb("⬅️ Назад к выбору устройства", "instructions")]);
+  buttons.push([cb("⬅️ В меню", "back")]);
   
   return Markup.inlineKeyboard(buttons);
 }
@@ -311,8 +311,8 @@ bot.action(/^guide_video_(ios|android|android_tv|windows|macos)$/, async (ctx) =
       {
         caption: `📹 Видео-инструкция для ${deviceNames[deviceType]}\n\nСмотрите подробное видео по настройке VPN.`,
         reply_markup: Markup.inlineKeyboard([
-          [Markup.button.callback("⬅️ Назад к инструкции", `guide_${deviceType}`)],
-          [Markup.button.callback("⬅️ В меню", "back")]
+          [cb("⬅️ Назад к инструкции", `guide_${deviceType}`)],
+          [cb("⬅️ В меню", "back")]
         ]).reply_markup
       }
     );
@@ -473,8 +473,8 @@ let successText = `✅ Подписка оформлена: ${plan.label}
 
 // Кнопка для начала настройки
 const keyboard = Markup.inlineKeyboard([
-  [Markup.button.callback("📱 Выберите устройство для настройки", `setup_device_${result.sub.id}`)],
-  [Markup.button.callback("⬅️ В меню", "back")]
+  [cb("📱 Выберите устройство для настройки", `setup_device_${result.sub.id}`, "success")],
+  [cb("⬅️ В меню", "back")]
 ]);
 
 await editOrAnswer(ctx, successText, keyboard);
@@ -552,9 +552,9 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
     await ctx.reply(
       messageText,
       Markup.inlineKeyboard([
-        [Markup.button.url("🔗 НАЖМИТЕ ДЛЯ ОПЛАТЫ", link)], // 👈 ссылка сразу
-        [Markup.button.callback("🔄 Проверить оплату", `check_topup_${topup.id}`)],
-        [Markup.button.callback("⬅️ Назад", "back")],
+        [urlBtn("🔗 НАЖМИТЕ ДЛЯ ОПЛАТЫ", link, "primary")],
+        [cb("🔄 Проверить оплату", `check_topup_${topup.id}`, "success")],
+        [cb("⬅️ Назад", "back")],
       ])
     );
   } catch (e) {
@@ -591,8 +591,8 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
       if (!topup) {
         console.warn(`[CHECK] Topup not found. id=${id}, userId=${ctx.dbUser.id}`);
         const keyboard = Markup.inlineKeyboard([
-          [Markup.button.callback("💳 Пополнить баланс", "balance_topup")],
-          [Markup.button.callback("⬅️ В меню", "back")]
+          [cb("💳 Пополнить баланс", "balance_topup", "primary")],
+          [cb("⬅️ В меню", "back")]
         ]);
         return ctx.reply("❌ Пополнение не найдено. Возможно, оно было удалено или истекло.\n\nСоздайте новый запрос на пополнение.", keyboard);
       }
@@ -650,11 +650,11 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
   const buttons = subs.map((s) => {
     const label = getDisplayLabel(s);
     const suffix = s.endDate ? `до ${formatDate(s.endDate)}` : "∞";
-    return [Markup.button.callback(`${label} ${suffix}`, `sub_${s.id}`)];
+    return [cb(`${label} ${suffix}`, `sub_${s.id}`, "primary")];
   });
 
 
-      buttons.push([Markup.button.callback("⬅️ Назад", "back")]);
+      buttons.push([cb("⬅️ Назад", "back")]);
 
       await editOrAnswer(
         ctx,
@@ -687,11 +687,10 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
         text += `\n\n🔗 Ссылка для операторов МТС, Миранда и других: ${s.subscriptionUrl2}`;
       }
 
-      const buttons = [[Markup.button.callback("⬅️ Назад", "my_subs")]];
+      const buttons = [[cb("⬅️ Назад", "my_subs")]];
 
-      // Только для платных подписок (M1, M3, M6, M12) добавим кнопку продления
       if (s.type !== "FREE") {
-        buttons.unshift([Markup.button.callback("🔄 Продлить", `extend_choose_${s.id}`)]);
+        buttons.unshift([cb("🔄 Продлить", `extend_choose_${s.id}`, "success")]);
       }
 
       await editOrAnswer(ctx, text, Markup.inlineKeyboard(buttons));
@@ -712,10 +711,10 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
     const buttons = paidPlanKeys.map((key) => {
       const plan = PLANS[key];
       const price = getPlanPrice(key);
-      return [Markup.button.callback(`${plan.label} — ${ruMoney(price)}`, `extend_${id}_${plan.type}`)];
+      return [cb(`${plan.label} — ${ruMoney(price)}`, `extend_${id}_${plan.type}`, "primary")];
     });
 
-    buttons.push([Markup.button.callback("⬅️ Назад", `sub_${id}`)]);
+    buttons.push([cb("⬅️ Назад", `sub_${id}`)]);
 
     const bannerExt2 = getDiscountBanner();
     const extendText = bannerExt2 ? `Выберите срок продления:\n\n${bannerExt2}` : "Выберите срок продления:";
@@ -828,12 +827,12 @@ return tx.subscription.update({
     const text = `📱 Выберите устройство, на которое вы будете устанавливать подписку:`;
     
     const keyboard = Markup.inlineKeyboard([
-      [Markup.button.callback("🍎 iPhone (iOS)", `setup_choose_ios_${subscriptionId}`)],
-      [Markup.button.callback("📱 Android", `setup_choose_android_${subscriptionId}`)],
-      [Markup.button.callback("📺 Android TV", `setup_choose_android_tv_${subscriptionId}`)],
-      [Markup.button.callback("💻 Windows", `setup_choose_windows_${subscriptionId}`)],
-      [Markup.button.callback("🖥️ macOS", `setup_choose_macos_${subscriptionId}`)],
-      [Markup.button.callback("⬅️ Назад", "back")]
+      [cb("🍎 iPhone (iOS)", `setup_choose_ios_${subscriptionId}`, "primary")],
+      [cb("📱 Android", `setup_choose_android_${subscriptionId}`, "primary")],
+      [cb("📺 Android TV", `setup_choose_android_tv_${subscriptionId}`)],
+      [cb("💻 Windows", `setup_choose_windows_${subscriptionId}`, "primary")],
+      [cb("🖥️ macOS", `setup_choose_macos_${subscriptionId}`, "primary")],
+      [cb("⬅️ Назад", "back")]
     ]);
 
     await editOrAnswer(ctx, text, keyboard);
@@ -871,15 +870,14 @@ return tx.subscription.update({
     const buttons = [];
     
     if (device === 'android_tv') {
-      // Для Android TV две ссылки
-      buttons.push([Markup.button.url("📥 Скачать Happ (Google Play)", APP_DOWNLOAD_LINKS.android_tv_play)]);
-      buttons.push([Markup.button.url("📥 Скачать Happ (APK)", APP_DOWNLOAD_LINKS.android_tv_apk)]);
+      buttons.push([urlBtn("📥 Скачать Happ (Google Play)", APP_DOWNLOAD_LINKS.android_tv_play, "primary")]);
+      buttons.push([urlBtn("📥 Скачать Happ (APK)", APP_DOWNLOAD_LINKS.android_tv_apk, "primary")]);
     } else {
-      buttons.push([Markup.button.url("📥 Скачать Happ", APP_DOWNLOAD_LINKS[device])]);
+      buttons.push([urlBtn("📥 Скачать Happ", APP_DOWNLOAD_LINKS[device], "primary")]);
     }
     
-    buttons.push([Markup.button.callback("✅ Я скачал приложение", `setup_downloaded_${device}_${subscriptionId}`)]);
-    buttons.push([Markup.button.callback("⬅️ Назад", `setup_device_${subscriptionId}`)]);
+    buttons.push([cb("✅ Я скачал приложение", `setup_downloaded_${device}_${subscriptionId}`, "success")]);
+    buttons.push([cb("⬅️ Назад", `setup_device_${subscriptionId}`)]);
 
     const keyboard = Markup.inlineKeyboard(buttons);
 
@@ -917,18 +915,18 @@ return tx.subscription.update({
     const buttons = [];
     
     if (subscriptionUrl) {
-      buttons.push([Markup.button.url("🔗 Подключить", subscriptionUrl)]);
+      buttons.push([urlBtn("🔗 Подключить", subscriptionUrl, "success")]);
     }
     
     if (subscriptionUrl2) {
-      buttons.push([Markup.button.url("🔗 Подключить 2 (МТС, Миранда)", subscriptionUrl2)]);
+      buttons.push([urlBtn("🔗 Подключить 2 (МТС, Миранда)", subscriptionUrl2, "success")]);
     }
     
     buttons.push(
-      [Markup.button.callback("📦 Мои подписки", "my_subs")],
-      [Markup.button.callback("📖 Инструкции", "instructions")],
-      [Markup.button.callback("📹 Видео-инструкция", `setup_video_${device}_${subscriptionId}`)],
-      [Markup.button.callback("⬅️ В меню", "back")]
+      [cb("📦 Мои подписки", "my_subs")],
+      [cb("📖 Инструкции", "instructions", "primary")],
+      [cb("📹 Видео-инструкция", `setup_video_${device}_${subscriptionId}`, "primary")],
+      [cb("⬅️ В меню", "back")]
     );
 
     // Для Android TV отправляем картинки
@@ -995,8 +993,8 @@ return tx.subscription.update({
         {
           caption: `📹 Видео-инструкция для ${deviceNames[deviceType]}\n\nСмотрите подробное видео по настройке VPN.`,
           reply_markup: Markup.inlineKeyboard([
-            [Markup.button.callback("📖 Инструкции", "instructions")],
-            [Markup.button.callback("⬅️ В меню", "back")]
+            [cb("📖 Инструкции", "instructions", "primary")],
+            [cb("⬅️ В меню", "back")]
           ]).reply_markup
         }
       );
@@ -1025,8 +1023,8 @@ return tx.subscription.update({
     const platformRows = instRows.slice(0, -1); // без «Назад»
     const kb = Markup.inlineKeyboard([
       ...platformRows,
-      [Markup.button.url("💬 Оставить отзыв", reviewsChannelUrl)],
-      [Markup.button.callback("⬅️ В меню", "back")]
+      [urlBtn("💬 Оставить отзыв", reviewsChannelUrl, "primary")],
+      [cb("⬅️ В меню", "back")]
     ]);
 
     await editOrAnswer(ctx, instructionIntro, kb);
