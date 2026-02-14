@@ -3,7 +3,8 @@ const path = require("path");
 const { google } = require("googleapis");
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID || "1ysYdpyercsaJ2OgtEYiFskU7caGSQ93jJSTfXzUiJ38";
-const SHEET_NAME = "Лист1";
+// В Google Sheets название листа зависит от локали: "Sheet1" (EN) или "Лист1" (RU). Укажите GOOGLE_SHEETS_SHEET_NAME если не подходит.
+const SHEET_NAME = process.env.GOOGLE_SHEETS_SHEET_NAME || "Sheet1";
 const KEYFILE_PATH = path.resolve(__dirname, "table-484713-7d2b62fb7e2e.json");
 
 let sheetsClient = null;
