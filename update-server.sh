@@ -56,6 +56,12 @@ if [ -f "package.json" ]; then
 fi
 echo ""
 
+# 4b. Удаление дубликата schema.prisma в корне (если есть — мешает prisma generate)
+if [ -f "./schema.prisma" ] && [ -f "./prisma/schema.prisma" ]; then
+    rm -f ./schema.prisma
+    echo "🗑️  Удалён дубликат schema.prisma из корня"
+fi
+
 # 5. Применение миграций базы данных
 echo "🔄 Применение миграций базы данных..."
 if [ -f "$DB_PATH" ]; then
@@ -67,9 +73,9 @@ else
 fi
 echo ""
 
-# 6. Генерация Prisma Client
+# 6. Генерация Prisma Client (явный путь — чтобы не подхватить дубликат в корне)
 echo "🔨 Генерация Prisma Client..."
-npx prisma generate
+npx prisma generate --schema=./prisma/schema.prisma
 echo ""
 
 # 7. Перезапуск бота
