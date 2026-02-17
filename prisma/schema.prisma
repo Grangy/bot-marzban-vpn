@@ -9,6 +9,7 @@ generator client {
 
 enum SubscriptionType {
   FREE
+  D7
   M1
   M3
   M6

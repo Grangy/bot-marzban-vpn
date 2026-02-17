@@ -14,6 +14,7 @@
     ruMoney,
     formatDate,
     calcEndDate,
+    calcEndDateFromDays,
     mainMenu,
     buyMenu,
     topupMenu,
@@ -328,7 +329,13 @@ bot.action(/^guide_video_(ios|android|android_tv|windows|macos)$/, async (ctx) =
       const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
 
       // Минимальная стоимость платного тарифа (с учётом скидки)
-      const minPaidPrice = Math.min(getPlanPrice("M1"), getPlanPrice("M3"), getPlanPrice("M6"), getPlanPrice("M12"));
+      const minPaidPrice = Math.min(
+        getPlanPrice("D7"),
+        getPlanPrice("M1"),
+        getPlanPrice("M3"),
+        getPlanPrice("M6"),
+        getPlanPrice("M12")
+      );
       const banner = getDiscountBanner();
       const discountLine = banner ? `\n${banner}\n` : "\n";
 
@@ -387,7 +394,7 @@ bot.action("balance_refresh", async (ctx) => {
 });
 
   // внутри registerActions(bot)
-  bot.action(/^buy_(M1|M3|M6|M12)$/, async (ctx) => {
+  bot.action(/^buy_(D7|M1|M3|M6|M12)$/, async (ctx) => {
     await safeAnswerCbQuery(ctx);
     const planKey = ctx.match[1];
     const plan = PLANS[planKey];
@@ -405,12 +412,15 @@ bot.action("balance_refresh", async (ctx) => {
         }
 
         // 2) создаём подписку (пока без ссылки)
+        const endDate = plan.days
+          ? calcEndDateFromDays(plan.days)
+          : calcEndDate(plan.months);
         const sub = await tx.subscription.create({
           data: {
             userId: ctx.dbUser.id,
             type: SubscriptionType[plan.type],
             startDate: new Date(),
-            endDate: calcEndDate(plan.months),
+            endDate,
           },
         });
 
@@ -436,7 +446,11 @@ bot.action("balance_refresh", async (ctx) => {
       }
 
       // 🔥 ВЫЗОВ MARZBAN API (создаем пользователя на обоих серверах)
-      const expireSeconds = plan.months === 12 ? 365*24*60*60 : plan.months*30*24*60*60;
+      const expireSeconds = plan.days
+        ? plan.days * 24 * 60 * 60
+        : plan.months === 12
+          ? 365 * 24 * 60 * 60
+          : plan.months * 30 * 24 * 60 * 60;
       const expire = Math.floor(Date.now() / 1000) + expireSeconds;
 
       const username = `${ctx.dbUser.telegramId}_${plan.type}_${result.sub.id}`;
@@ -707,7 +721,7 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
       return;
     }
 
-    const paidPlanKeys = ["M1", "M3", "M6", "M12"];
+    const paidPlanKeys = ["M1", "M3", "M6", "M12"]; // D7 не используется для продления
     const buttons = paidPlanKeys.map((key) => {
       const plan = PLANS[key];
       const price = getPlanPrice(key);

@@ -1,0 +1,3 @@
+-- SQLite stores enums as TEXT; adding D7 requires no table change.
+-- New subscription type D7 will be accepted in existing "type" column.
+-- No schema migration needed for SQLite enum extension.

@@ -83,7 +83,7 @@ bot.start(async (ctx) => {
   }
 
   const raw = (ctx.message?.text || "").trim();
-  const planMatch = raw.match(/^\/start(?:@\w+)?\s+plan_(M1|M3|M6|M12)$/i);
+  const planMatch = raw.match(/^\/start(?:@\w+)?\s+plan_(D7|M1|M3|M6|M12)$/i);
 
   if (planMatch) {
     const planKey = planMatch[1].toUpperCase();
@@ -95,7 +95,7 @@ bot.start(async (ctx) => {
 
     const price = getPlanPrice(planKey);
     const banner = getDiscountBanner();
-    const discountLine = banner ? `\n\n${banner}\n` : "\n\n";
+    const discountLine = banner ? `\n\n${banner}\n` : "";
     const planText = `🛒 Выбран тариф: **${plan.label}** — ${ruMoney(price)}${discountLine}Оплата производится с баланса в боте. Если средств не хватает — пополните баланс, затем нажмите «Приобрести».
 
 Выберите действие:`;
@@ -114,6 +114,14 @@ bot.start(async (ctx) => {
 Выберите действие:`;
 
   await ctx.reply(welcomeText, mainMenu(user.balance));
+});
+
+// Команда /chatid — показать ID чата (для настройки ADMIN_GROUP_ID)
+bot.command("chatid", async (ctx) => {
+  const c = ctx.chat;
+  const id = c ? String(c.id) : "?";
+  const type = c?.type || "?";
+  await ctx.reply(`🆔 Chat ID: \`${id}\`\nТип: ${type}\n\nДобавь в .env:\nADMIN_GROUP_ID=${id}`, { parse_mode: "Markdown" });
 });
 
 bot.command("menu", async (ctx) => {

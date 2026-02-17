@@ -8,7 +8,7 @@ const MARZBAN_TOKEN = process.env.MARZBAN_TOKEN;
 
 function parseTelegramIdFromUsername(username) {
   if (!username || typeof username !== "string") return null;
-  const m = username.match(/^(\d+)_(?:M1|M3|M6|M12)_\d+$/);
+  const m = username.match(/^(\d+)_(?:D7|M1|M3|M6|M12)_\d+$/);
   return m ? m[1] : null;
 }
 

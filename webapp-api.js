@@ -243,7 +243,7 @@ function registerWebAppAPI(app) {
       });
 
       // Вычисляем баланс из транзакций для проверки
-      const paidSubscriptions = user.subscriptions.filter(s => ["M1", "M3", "M6", "M12"].includes(s.type));
+      const paidSubscriptions = user.subscriptions.filter(s => ["D7", "M1", "M3", "M6", "M12"].includes(s.type));
       const totalSpent = paidSubscriptions.reduce((sum, sub) => {
         const plan = PLANS[sub.type];
         return sum + (plan ? plan.price : 0);
@@ -407,7 +407,7 @@ function registerWebAppAPI(app) {
       const paidSubscriptions = await prisma.subscription.findMany({
         where: { 
           userId: user.id,
-          type: { in: ["M1", "M3", "M6", "M12"] }
+          type: { in: ["D7", "M1", "M3", "M6", "M12"] }
         },
         select: { type: true }
       });
@@ -503,7 +503,7 @@ function registerWebAppAPI(app) {
         whereClause.endDate = { lte: new Date() };
       }
 
-      if (type && ["M1", "M3", "M6", "M12", "PROMO_10D", "FREE"].includes(type)) {
+      if (type && ["D7", "M1", "M3", "M6", "M12", "PROMO_10D", "FREE"].includes(type)) {
         whereClause.type = type;
       }
 
@@ -745,12 +745,14 @@ function registerWebAppAPI(app) {
       .filter(([key]) => key !== "PROMO_10D" && key !== "FREE")
       .map(([key, plan]) => {
         const price = getPlanPrice(key);
+        const months = plan.months || (plan.days ? plan.days / 30 : null);
         return {
           id: key,
           label: plan.label,
           price,
-          months: plan.months,
-          pricePerMonth: Math.round(price / plan.months),
+          months: months,
+          days: plan.days,
+          pricePerMonth: months ? Math.round(price / months) : null,
           buyUrl: `${baseUrl}?start=plan_${key}`,
           discountBanner: getDiscountBanner(),
         };
@@ -1015,7 +1017,11 @@ function registerWebAppAPI(app) {
 
         // Вычисляем дату окончания
         const endDate = new Date();
-        endDate.setMonth(endDate.getMonth() + plan.months);
+        if (plan.days) {
+          endDate.setDate(endDate.getDate() + plan.days);
+        } else {
+          endDate.setMonth(endDate.getMonth() + plan.months);
+        }
 
         // Создаем подписку
         const subscription = await tx.subscription.create({
@@ -1032,7 +1038,9 @@ function registerWebAppAPI(app) {
 
       // Создаем пользователя в Marzban
       const username = `${telegramId}_${planId}_${result.id}`;
-      const expireSeconds = plan.months * 30 * 24 * 60 * 60;
+      const expireSeconds = plan.days
+        ? plan.days * 24 * 60 * 60
+        : plan.months * 30 * 24 * 60 * 60;
       const expire = Math.floor(Date.now() / 1000) + expireSeconds;
 
       const userData = {
@@ -1274,7 +1282,7 @@ function registerWebAppAPI(app) {
       const subscriptions = await prisma.subscription.findMany({
         where: { 
           userId: user.id,
-          type: { in: ["M1", "M3", "M6", "M12"] }
+          type: { in: ["D7", "M1", "M3", "M6", "M12"] }
         },
         orderBy: { startDate: "desc" }
       });

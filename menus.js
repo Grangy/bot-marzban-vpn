@@ -39,27 +39,33 @@ function getTopupAmounts() {
 }
 
 const PLANS = {
+  D7: {
+    label: "7 дней",
+    price: 99,
+    days: 7,
+    type: "D7"
+  },
   M1: {
     label: "1 месяц",
-    price: 120,
+    price: 199,
     months: 1,
     type: "M1"
   },
   M3: {
     label: "3 месяца",
-    price: 330,
+    price: 499,
     months: 3,
     type: "M3"
   },
   M6: {
     label: "6 месяцев",
-    price: 570,
+    price: 799,
     months: 6,
     type: "M6"
   },
   M12: {
     label: "12 месяцев",
-    price: 1140,
+    price: 1499,
     months: 12,
     type: "M12"
   },
@@ -70,7 +76,7 @@ const PLANS = {
     type: "PROMO_10D"
   },
 };
-const TOPUP_AMOUNTS = [120, 330, 570, 1140];
+const TOPUP_AMOUNTS = [99, 199, 499, 799, 1499];
 
 function ruMoney(v) {
   return `${v} ₽`;
@@ -87,9 +93,17 @@ function calcEndDate(months) {
   return dt;
 }
 
+function calcEndDateFromDays(days) {
+  const now = new Date();
+  const dt = new Date(now);
+  dt.setDate(dt.getDate() + days);
+  return dt;
+}
+
 function getDisplayLabel(sub) {
   if (sub.type === "FREE") return "Free";
   if (sub.type === "PROMO_10D") return "10 дней (промо)";
+  if (sub.type === "D7") return "7 дней";
 
   if (sub.startDate && sub.endDate) {
     const start = new Date(sub.startDate);
@@ -147,11 +161,13 @@ function mainMenu(balanceRub = 0) {
 
 
 function buyMenu() {
+  const p7d = getPlanPrice("D7");
   const p1 = getPlanPrice("M1");
   const p3 = getPlanPrice("M3");
   const p6 = getPlanPrice("M6");
   const p12 = getPlanPrice("M12");
   return Markup.inlineKeyboard([
+    [cb(`${PLANS.D7.label} — ${ruMoney(p7d)}`, "buy_D7", "primary")],
     [cb(`${PLANS.M1.label} — ${ruMoney(p1)}`, "buy_M1", "primary")],
     [cb(`${PLANS.M3.label} — ${ruMoney(p3)}`, "buy_M3", "primary")],
     [cb(`${PLANS.M6.label} — ${ruMoney(p6)}`, "buy_M6", "primary")],
@@ -218,6 +234,7 @@ module.exports = {
   ruMoney,
   formatDate,
   calcEndDate,
+  calcEndDateFromDays,
   mainMenu,
   balanceMenu,
   buyMenu,

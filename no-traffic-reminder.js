@@ -26,7 +26,7 @@ function startNoTrafficReminder(bot) {
           noTrafficReminderSentAt: null,
           subscriptions: {
             some: {
-              type: { in: ["M1", "M3", "M6", "M12"] },
+              type: { in: ["D7", "M1", "M3", "M6", "M12"] },
               startDate: { lte: twoHoursAgo },
             },
           },

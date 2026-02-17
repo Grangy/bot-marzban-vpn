@@ -42,12 +42,7 @@ function isDiscountActive() {
 }
 
 function getDiscountBanner() {
-  const cfg = getConfig();
-  if (!cfg.active) return null;
-  const end = new Date(cfg.endAt);
-  const d = String(end.getDate()).padStart(2, "0");
-  const m = String(end.getMonth() + 1).padStart(2, "0");
-  return `🔥 Скидка -${cfg.percent}% до 23:59 ${d}.${m}`;
+  return null; // сообщение о скидке отключено
 }
 
 /** Округляет до кратного 5 руб */
