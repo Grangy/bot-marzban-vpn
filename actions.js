@@ -418,7 +418,7 @@ bot.action("balance_refresh", async (ctx) => {
         const sub = await tx.subscription.create({
           data: {
             userId: ctx.dbUser.id,
-            type: SubscriptionType[plan.type],
+            type: SubscriptionType[plan.type] ?? plan.type,
             startDate: new Date(),
             endDate,
           },
