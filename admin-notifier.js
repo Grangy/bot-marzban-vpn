@@ -28,6 +28,19 @@ function isAdminGroup(chatId) {
   return false;
 }
 
+/** Нормализованный список ID для отправки (включая супергруппы) */
+function getAdminChatIdsForSend() {
+  const ids = new Set();
+  for (const cfg of ADMIN_GROUP_IDS) {
+    ids.add(cfg);
+    if (!cfg.startsWith("-100")) {
+      const n = cfg.replace(/^-/, "");
+      ids.add(`-100${n}`);
+    }
+  }
+  return [...ids];
+}
+
 const ADMIN_GROUP_ID = ADMIN_GROUP_IDS[0] || "-5184781938"; // для отправки сообщений
 
 let botInstance = null;
@@ -368,11 +381,28 @@ async function sendStats(chatId = null) {
   }
 }
 
+/** Админ-команды для логирования */
+const ADMIN_CMDS = ["stat", "admhelp", "admmenu", "createpromo", "promos", "payment", "delpayment", "discount", "exporttopups", "topref"];
+
 /**
  * Инициализация админ-нотификатора
  */
 function initAdminNotifier(bot) {
   botInstance = bot;
+
+  // Middleware: логируем админ-команды из групп (для отладки)
+  bot.use((ctx, next) => {
+    const cmd = ctx.message?.text?.match(/^\/(\w+)(@\w+)?/)?.[1]?.toLowerCase();
+    if (cmd && ADMIN_CMDS.includes(cmd) && ctx.chat?.type?.match(/group|supergroup/)) {
+      const cid = ctx.chat?.id;
+      const ok = isAdminGroup(cid);
+      console.log(`[ADMIN] /${cmd} chatId=${cid} isAdmin=${ok} configured=${ADMIN_GROUP_IDS.join(",")}`);
+      if (!ok) {
+        console.log(`[ADMIN] ⚠️ Чат ${cid} не в списке. Добавь в .env: ADMIN_GROUP_ID=${cid}`);
+      }
+    }
+    return next();
+  });
 
   // Команда /admhelp — справка по всем админ-командам
   bot.command("admhelp", async (ctx) => {
