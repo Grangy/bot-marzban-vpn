@@ -21,6 +21,9 @@ token.json
 discount-config.json
 # Google Sheets service account key
 table-484713-7d2b62fb7e2e.json
+# SSH keys
+keys/
+key
 # Конфиденциальная документация с ключами
 API_DOCUMENTATION.md
 # Документация (можно добавить обратно, если нужна в Git)

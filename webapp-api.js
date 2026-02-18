@@ -446,6 +446,7 @@ function registerWebAppAPI(app) {
         ok: true,
         data: { 
           balance: Number(user.balance),
+          balanceReferral: promoBonusReceived,
           balanceFresh: userFresh ? Number(userFresh.balance) : null,
           diagnostics: {
             totalTopupsCredited: totalTopupAmount,
