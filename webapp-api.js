@@ -442,11 +442,16 @@ function registerWebAppAPI(app) {
       // Вычисляем баланс из транзакций (для проверки)
       const calculatedBalance = totalTopupAmount + promoBonusReceived + adminPromoBonus - totalSpent;
 
+      const totalBalance = Number(user.balance);
+      const balanceReferralAmount = promoBonusReceived;
+      const balanceMain = totalBalance - balanceReferralAmount;
+
       res.json({
         ok: true,
-        data: { 
-          balance: Number(user.balance),
-          balanceReferral: promoBonusReceived,
+        data: {
+          balance: balanceMain,
+          balanceReferral: balanceReferralAmount,
+          totalBalance,
           balanceFresh: userFresh ? Number(userFresh.balance) : null,
           diagnostics: {
             totalTopupsCredited: totalTopupAmount,
