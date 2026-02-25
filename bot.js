@@ -9,6 +9,22 @@ const crypto = require("crypto");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
+/* Логирование входящих апдейтов (группы/каналы) — чтобы понять, доходят ли сообщения из админ-чата */
+const ADMIN_GROUP_ID_ENV = (process.env.ADMIN_GROUP_ID || "").split(",").map((s) => s.trim()).filter(Boolean);
+bot.use((ctx, next) => {
+  const chat = ctx.chat;
+  const chatId = chat?.id;
+  const chatType = chat?.type;
+  const isGroupOrChannel = chatType === "group" || chatType === "supergroup" || chatType === "channel";
+  if (isGroupOrChannel && chatId != null) {
+    const text = ctx.message?.text || ctx.channelPost?.text || ctx.callbackQuery?.data || "[no text]";
+    const from = ctx.from?.id || ctx.channelPost?.sender_chat?.id || "?";
+    const configured = ADMIN_GROUP_ID_ENV.join(",") || "(не задан)";
+    console.log(`[BOT] ← chatId=${chatId} type=${chatType} from=${from} text=${String(text).slice(0, 60)} configured=${configured}`);
+  }
+  return next();
+});
+
 /* Middleware: учёт пользователя */
 bot.use(async (ctx, next) => {
 
