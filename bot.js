@@ -17,10 +17,11 @@ bot.use((ctx, next) => {
   const chatType = chat?.type;
   const isGroupOrChannel = chatType === "group" || chatType === "supergroup" || chatType === "channel";
   if (isGroupOrChannel && chatId != null) {
-    const text = ctx.message?.text || ctx.channelPost?.text || ctx.callbackQuery?.data || "[no text]";
-    const from = ctx.from?.id || ctx.channelPost?.sender_chat?.id || "?";
-    const configured = ADMIN_GROUP_ID_ENV.join(",") || "(не задан)";
-    console.log(`[BOT] ← chatId=${chatId} type=${chatType} from=${from} text=${String(text).slice(0, 60)} configured=${configured}`);
+    const updateType = ctx.updateType;
+    const msg = ctx.message || ctx.editedMessage || ctx.channelPost || ctx.editedChannelPost;
+    const text = msg?.text || msg?.caption || ctx.callbackQuery?.data || "";
+    const from = ctx.from?.id || ctx.channelPost?.sender_chat?.id || ctx.callbackQuery?.from?.id || "?";
+    console.log(`[BOT] ← update=${updateType} chatId=${chatId} from=${from} text=${String(text).slice(0, 80) || "[пусто]"}`);
   }
   return next();
 });

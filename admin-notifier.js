@@ -848,11 +848,11 @@ function initAdminNotifier(bot) {
 
   // Команда /stat в админ-группе
   bot.command("stat", async (ctx) => {
-    const chatId = String(ctx.chat.id);
-    
-    // Проверяем, что команда из админ-группы
-    if (!isAdminGroup(chatId)) return;
-    
+    const chatId = ctx.chat?.id != null ? String(ctx.chat.id) : "";
+    const isAdmin = isAdminGroup(chatId);
+    console.log(`[ADMIN] /stat получена chatId=${chatId} isAdmin=${isAdmin}`);
+    if (!isAdmin) return;
+
     await ctx.reply("⏳ Собираю статистику...");
     await sendStats(chatId);
   });
