@@ -464,15 +464,17 @@ bot.action("balance_refresh", async (ctx) => {
         note: `Telegram user ${ctx.dbUser.accountName || ctx.dbUser.telegramId}`,
       };
 
-      // Создаем пользователя на обоих серверах
-      const { url1: subscriptionUrl, url2: subscriptionUrl2 } = await createMarzbanUserOnBothServers(userData);
+      // Создаем пользователя на обоих серверах (Remnawave и/или Marzban)
+      const { url1: subscriptionUrl, url2: subscriptionUrl2, remnawaveUuid } =
+        await createMarzbanUserOnBothServers(userData);
 
-      // Сохраняем обе ссылки в БД
+      // Сохраняем ссылки и uuid Remnawave (нужен для продления)
       await prisma.subscription.update({
         where: { id: result.sub.id },
-        data: { 
+        data: {
           subscriptionUrl,
-          subscriptionUrl2
+          subscriptionUrl2,
+          ...(remnawaveUuid ? { remnawaveUuid } : {}),
         },
       });
 
@@ -785,17 +787,18 @@ return tx.subscription.update({
 
       });
 
-      // 🔥 продление на обоих Marzban серверах (если есть ссылки)
-      if (sub.subscriptionUrl || sub.subscriptionUrl2) {
+      // 🔥 продление на Remnawave / Marzban (если есть ссылки или uuid Remnawave)
+      if (sub.subscriptionUrl || sub.subscriptionUrl2 || sub.remnawaveUuid) {
         try {
           const username = `${ctx.dbUser.telegramId}_${sub.type}_${sub.id}`;
           const days = plan.months * 30;
 
-          // Продлеваем на обоих серверах
-          const extendResults = await extendMarzbanUserOnBothServers(username, days);
+          const extendResults = await extendMarzbanUserOnBothServers(username, days, {
+            remnawaveUuid: sub.remnawaveUuid,
+          });
           
-          if (!extendResults.success1 && sub.subscriptionUrl) {
-            console.warn(`[Extend] Failed to extend on primary server for ${username}`);
+          if (!extendResults.success1 && (sub.subscriptionUrl || sub.remnawaveUuid)) {
+            console.warn(`[Extend] Failed to extend on primary (Remnawave/Marzban) for ${username}`);
           }
           if (!extendResults.success2 && sub.subscriptionUrl2) {
             console.warn(`[Extend] Failed to extend on secondary server for ${username}`);

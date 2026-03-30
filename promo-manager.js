@@ -355,16 +355,20 @@ async function activateReferralPromo(userId, owner) {
       data_limit_reset_strategy: "no_reset"
     };
     
-    const { url1: subscriptionUrl, url2: subscriptionUrl2 } = await createMarzbanUserOnBothServers(userData);
-    
-    // Обновляем подписку с ссылками
+    const { url1: subscriptionUrl, url2: subscriptionUrl2, remnawaveUuid } =
+      await createMarzbanUserOnBothServers(userData);
+
     await prisma.subscription.update({
       where: { id: result.subscriptionId },
-      data: { subscriptionUrl, subscriptionUrl2 }
+      data: {
+        subscriptionUrl,
+        subscriptionUrl2,
+        ...(remnawaveUuid ? { remnawaveUuid } : {}),
+      },
     });
-    
+
     const updatedSub = await prisma.subscription.findUnique({ where: { id: result.subscriptionId } });
-    
+
     let message = `✅ Реферальный промокод активирован!\n\n🎁 Вы получили VPN на 3 дня с обходом блокировок мобильной связи.\n\n📱 Ссылки на подписки в разделе «Мои подписки».`;
     
     return { 
@@ -517,16 +521,20 @@ async function activateAdminDaysPromo(userId, promo) {
       data_limit_reset_strategy: "no_reset"
     };
     
-    const { url1: subscriptionUrl, url2: subscriptionUrl2 } = await createMarzbanUserOnBothServers(userData);
-    
-    // Обновляем подписку с ссылками
+    const { url1: subscriptionUrl, url2: subscriptionUrl2, remnawaveUuid } =
+      await createMarzbanUserOnBothServers(userData);
+
     await prisma.subscription.update({
       where: { id: result.subscriptionId },
-      data: { subscriptionUrl, subscriptionUrl2 }
+      data: {
+        subscriptionUrl,
+        subscriptionUrl2,
+        ...(remnawaveUuid ? { remnawaveUuid } : {}),
+      },
     });
-    
+
     const updatedSub = await prisma.subscription.findUnique({ where: { id: result.subscriptionId } });
-    
+
     const promoName = promo.customName ? `"${promo.customName}"` : "промокод";
     let message = `🎉 ${promoName} активирован!\n\n✅ Вам начислена подписка на ${result.days} ${result.days === 1 ? 'день' : result.days < 5 ? 'дня' : 'дней'}\n\n📱 Ссылки на подписки в разделе «Мои подписки».`;
     

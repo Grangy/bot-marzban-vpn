@@ -1065,15 +1065,16 @@ function registerWebAppAPI(app) {
         data_limit_reset_strategy: "no_reset"
       };
 
-      const { url1, url2 } = await createMarzbanUserOnBothServers(userData);
+      const { url1, url2, remnawaveUuid } = await createMarzbanUserOnBothServers(userData);
 
-      // Обновляем подписку с URL
+      // Обновляем подписку с URL и uuid Remnawave
       const updatedSub = await prisma.subscription.update({
         where: { id: result.id },
         data: {
           subscriptionUrl: url1,
-          subscriptionUrl2: url2
-        }
+          subscriptionUrl2: url2,
+          ...(remnawaveUuid ? { remnawaveUuid } : {}),
+        },
       });
 
       // Получаем обновленный баланс

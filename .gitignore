@@ -6,6 +6,10 @@ node_modules
 /prisma/dev.db
 /prisma/dev.db-shm
 /prisma/dev.db-wal
+/prisma/dev.db.prod
+/prisma/dev.db.prod-*
+.DS_Store
+back/
 build.js
 all.js
 *.MOV
@@ -26,6 +30,20 @@ keys/
 key
 # Конфиденциальная документация с ключами
 API_DOCUMENTATION.md
+
+# scripts/new-api: всё, что может содержать ключи/токены
+scripts/new-api/.env
+scripts/new-api/.env.*
+scripts/new-api/*.env
+scripts/new-api/*secret*
+scripts/new-api/*token*
+scripts/new-api/*key*
+scripts/new-api/*.pem
+scripts/new-api/*.p12
+scripts/new-api/*.crt
+scripts/new-api/*.cer
+scripts/new-api/*.der
+scripts/new-api/*.jks
 # Документация (можно добавить обратно, если нужна в Git)
 # PROMO_API_DOCUMENTATION.md
 # PROMO_SYSTEM_UPDATE.md

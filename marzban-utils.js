@@ -1,60 +1,255 @@
 // marzban-utils.js
-// Утилиты для работы с Marzban API (основной и резервный сервер)
+// Утилиты для VPN API: Remnawave (новый) и/или Marzban API (основной и резервный сервер)
 
-const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 const MARZBAN_API_URL = process.env.MARZBAN_API_URL;
-const MARZBAN_API_URL_2 = process.env.MARZBAN_API_URL_2 || "http://51.250.72.185:3033";
+// В режиме "только Remnawave" второй Marzban не должен дергаться по умолчанию.
+// Поэтому НЕ используем дефолтный URL, только явная настройка через .env.
+const MARZBAN_API_URL_2 = process.env.MARZBAN_API_URL_2 || "";
 const MARZBAN_TOKEN = process.env.MARZBAN_TOKEN;
-const MARZBAN_TOKEN_2 = process.env.MARZBAN_TOKEN_2 || process.env.MARZBAN_TOKEN; // Если не указан, используем основной токен
+const MARZBAN_TOKEN_2 = process.env.MARZBAN_TOKEN_2 || process.env.MARZBAN_TOKEN;
+
+const REMNAWAVE_API_URL = (process.env.REMNAWAVE_API_URL || "").replace(/\/$/, "");
+// В .env бывает два варианта имени ключа (в доке remnawave-api это API_ACCESS_KEY).
+const REMNAWAVE_API_KEY = process.env.REMNAWAVE_API_KEY || process.env.API_ACCESS_KEY || "";
+const REMNAWAVE_SUBSCRIPTION_TYPE = process.env.REMNAWAVE_SUBSCRIPTION_TYPE || "russia";
+const REMNAWAVE_DEVICE_LIMIT_RAW = process.env.REMNAWAVE_DEVICE_LIMIT;
+
+function useRemnawavePrimary() {
+  return Boolean(REMNAWAVE_API_URL && REMNAWAVE_API_KEY);
+}
+
+function remnawaveHeaders() {
+  return {
+    "Content-Type": "application/json",
+    "x-api-key": REMNAWAVE_API_KEY,
+  };
+}
+
+/** Дней подписки из Unix expire (как в Marzban payload) */
+function daysFromExpireUnix(expireUnixSeconds) {
+  const now = Math.floor(Date.now() / 1000);
+  return Math.max(1, Math.ceil((expireUnixSeconds - now) / 86400));
+}
+
+/** Панель Remnawave кладёт поля в user.response (subscriptionUrl, uuid, …) */
+function remnawaveUserPayload(userNode) {
+  if (!userNode || typeof userNode !== "object") return null;
+  return userNode.response && typeof userNode.response === "object" ? userNode.response : userNode;
+}
+
+/**
+ * Вытащить ссылку подписки из ответа Remnawave (разные форматы user)
+ */
+function pickUuidFromRemnawaveBody(body) {
+  const u = body && typeof body === "object" ? body.user : null;
+  const inner = remnawaveUserPayload(u);
+  return inner && typeof inner.uuid === "string" ? inner.uuid : null;
+}
+
+function pickSubscriptionUrlFromRemnawaveBody(body) {
+  const u = body && typeof body === "object" ? body.user : null;
+  const inner = remnawaveUserPayload(u);
+  if (!inner) return null;
+  const direct =
+    inner.subscription_url ||
+    inner.subscriptionUrl ||
+    inner.shortUrl ||
+    inner.subscribeUrl ||
+    inner.link ||
+    inner.url ||
+    null;
+  if (typeof direct === "string" && direct.length > 0) return direct;
+  if (Array.isArray(inner.links)) {
+    for (const l of inner.links) {
+      if (typeof l === "string" && /^https?:\/\//i.test(l)) return l;
+      if (l && typeof l === "object") {
+        const s = l.url || l.href || l.link;
+        if (typeof s === "string" && /^https?:\/\//i.test(s)) return s;
+      }
+    }
+  }
+  return findUrlWithSubPath(inner, 0);
+}
+
+/** Fallback: GET по username (на части деплоев lookup может не работать) */
+async function remnawaveResolveUuidByUsername(username) {
+  const r = await fetch(`${REMNAWAVE_API_URL}/v1/users/${encodeURIComponent(username)}`, {
+    headers: { "x-api-key": REMNAWAVE_API_KEY },
+  });
+  const text = await r.text();
+  let json;
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    return null;
+  }
+  if (!r.ok || !json.user) return null;
+  return pickUuidFromRemnawaveBody(json);
+}
+
+function findUrlWithSubPath(obj, depth) {
+  if (!obj || depth > 6) return null;
+  if (typeof obj === "string" && /^https?:\/\//i.test(obj) && obj.includes("/sub/")) return obj;
+  if (typeof obj !== "object") return null;
+  for (const v of Object.values(obj)) {
+    const x = findUrlWithSubPath(v, depth + 1);
+    if (x) return x;
+  }
+  return null;
+}
+
+function remnawaveDeviceLimit() {
+  if (REMNAWAVE_DEVICE_LIMIT_RAW === undefined || REMNAWAVE_DEVICE_LIMIT_RAW === "") return undefined;
+  const n = Number(REMNAWAVE_DEVICE_LIMIT_RAW);
+  if (Number.isNaN(n)) return undefined;
+  return n;
+}
+
+/**
+ * Создать пользователя через Remnawave HTTP API (POST /v1/users)
+ * @returns {Promise<{ subscriptionUrl: string | null, uuid: string | null }>}
+ */
+async function createUserOnRemnawave(userData) {
+  const empty = { subscriptionUrl: null, uuid: null };
+  try {
+    const days = daysFromExpireUnix(userData.expire);
+    const payload = {
+      username: userData.username,
+      days,
+      gb: 0,
+      subscriptionType: REMNAWAVE_SUBSCRIPTION_TYPE,
+    };
+    const dl = remnawaveDeviceLimit();
+    if (dl !== undefined) payload.deviceLimit = dl;
+
+    console.log(`[Remnawave] Creating user ${userData.username} (${days} d) at ${REMNAWAVE_API_URL}/v1/users`);
+
+    const response = await fetch(`${REMNAWAVE_API_URL}/v1/users`, {
+      method: "POST",
+      headers: remnawaveHeaders(),
+      body: JSON.stringify(payload),
+    });
+
+    const text = await response.text();
+    let json;
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      json = {};
+    }
+
+    if (!response.ok) {
+      console.error(`[Remnawave] Failed to create user:`, response.status, text);
+      return empty;
+    }
+
+    const subscriptionUrl = pickSubscriptionUrlFromRemnawaveBody(json);
+    const uuid = pickUuidFromRemnawaveBody(json);
+    if (!subscriptionUrl) {
+      console.warn("[Remnawave] User created but subscription URL not found in response:", text.slice(0, 500));
+    } else {
+      console.log(`[Remnawave] User created, subscription URL OK`);
+    }
+    if (!uuid) {
+      console.warn("[Remnawave] User created but uuid not in response — продление может не сработать");
+    }
+    return { subscriptionUrl: subscriptionUrl || null, uuid: uuid || null };
+  } catch (error) {
+    console.error(`[Remnawave] Error creating user:`, error);
+    return empty;
+  }
+}
+
+/**
+ * Продлить через Remnawave (PATCH /v1/users/:uuid/extend)
+ * @param {object} [opts]
+ * @param {string|null} [opts.remnawaveUuid] — из БД после создания (предпочтительно)
+ */
+async function extendRemnawaveUser(username, days, opts = {}) {
+  try {
+    let uuid = opts.remnawaveUuid || null;
+    if (!uuid) {
+      uuid = await remnawaveResolveUuidByUsername(username);
+    }
+    if (!uuid) {
+      console.error(`[Remnawave] Cannot resolve uuid for username ${username} (передайте remnawaveUuid из Subscription)`);
+      return false;
+    }
+    const url = `${REMNAWAVE_API_URL}/v1/users/${encodeURIComponent(uuid)}/extend`;
+    const body = JSON.stringify({ days: Number(days) });
+    let lastText = "";
+    const maxAttempts = 18;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const response = await fetch(url, {
+        method: "PATCH",
+        headers: remnawaveHeaders(),
+        body,
+      });
+      lastText = await response.text();
+      if (response.ok) {
+        console.log(`[Remnawave] User ${username} extended by ${days} days`);
+        return true;
+      }
+      const maybeSyncDelay =
+        response.status === 404 && lastText.includes("User not found") && attempt < maxAttempts;
+      if (maybeSyncDelay) {
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
+      console.error(`[Remnawave] Failed to extend user ${username} (${uuid}):`, response.status, lastText);
+      return false;
+    }
+    console.error(`[Remnawave] Failed to extend user ${username} (${uuid}) after retries:`, lastText);
+    return false;
+  } catch (error) {
+    console.error(`[Remnawave] Error extending user ${username}:`, error);
+    return false;
+  }
+}
 
 /**
  * Преобразует subscription_url от Marzban API в ссылку для rus2 сервера
- * @param {string} originalUrl - Оригинальная subscription_url от API (например, http://51.250.72.185:3033/sub/...)
- * @returns {string} - Преобразованная ссылка для rus2 (https://rus2.grangy.ru:8888/sub/...)
  */
 function convertToRus2Url(originalUrl) {
   if (!originalUrl) return null;
-  
-  // Извлекаем путь после /sub/ из оригинальной ссылки
+
   const match = originalUrl.match(/\/sub\/(.+)$/);
   if (match) {
     const token = match[1];
     return `https://rus2.grangy.ru:8888/sub/${token}`;
   }
-  
+
   return null;
 }
 
 /**
  * Создает пользователя на одном Marzban API сервере
- * @param {string} apiUrl - URL API сервера
- * @param {string} token - Токен доступа
- * @param {object} userData - Данные пользователя для создания
- * @returns {Promise<string|null>} - subscription_url или null при ошибке
  */
 async function createUserOnMarzbanServer(apiUrl, token, userData) {
   try {
-    console.log(`[Marzban] Creating user on ${apiUrl}`);
-    
-    const response = await fetch(`${apiUrl}/users`, {
+    const base = String(apiUrl || "").replace(/\/$/, "");
+    console.log(`[Marzban] Creating user on ${base}`);
+
+    const response = await fetch(`${base}/users`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify(userData)
+      body: JSON.stringify(userData),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[Marzban] Failed to create user on ${apiUrl}:`, errorText);
+      console.error(`[Marzban] Failed to create user on ${base}:`, errorText);
       return null;
     }
 
     const result = await response.json();
     const subscriptionUrl = result.subscription_url || null;
-    console.log(`[Marzban] User created successfully on ${apiUrl}`);
+    console.log(`[Marzban] User created successfully on ${base}`);
     return subscriptionUrl;
   } catch (error) {
     console.error(`[Marzban] Error creating user on ${apiUrl}:`, error);
@@ -63,44 +258,32 @@ async function createUserOnMarzbanServer(apiUrl, token, userData) {
 }
 
 /**
- * Создает пользователя на обоих Marzban серверах
- * На основном сервере: оба inbounds (VLESS TCP REALITY и VLESS-TCP-REALITY-VISION)
- * На втором сервере: только VLESS TCP REALITY (так как VLESS-TCP-REALITY-VISION не существует)
- * @param {object} userData - Данные пользователя
- * @param {string} userData.username - Имя пользователя
- * @param {number} userData.expire - Unix timestamp истечения
- * @param {object} userData.proxies - Настройки прокси
- * @param {object} userData.inbounds - Настройки inbounds для основного сервера
- * @param {string} userData.note - Примечание
- * @returns {Promise<{url1: string|null, url2: string|null}>} - Обе ссылки подписки
+ * Создает пользователя: primary = Remnawave (если задан) или Marzban; secondary = Marzban при необходимости
  */
 async function createMarzbanUserOnBothServers(userData) {
-  const results = { url1: null, url2: null };
+  const results = { url1: null, url2: null, remnawaveUuid: null };
 
-  // Подготовим данные для основного сервера (с исходными inbounds)
   const userDataPrimary = { ...userData };
-
-  // Подготовим данные для второго сервера (только VLESS TCP REALITY)
-  const userDataSecondary = { 
+  const userDataSecondary = {
     ...userData,
-    inbounds: { vless: ["VLESS TCP REALITY"] } // Только этот inbound существует на втором сервере
+    inbounds: { vless: ["VLESS TCP REALITY"] },
   };
 
-  // Проверяем, настроен ли основной API
-  if (!MARZBAN_API_URL || MARZBAN_API_URL === "your_marzban_api_url") {
+  if (useRemnawavePrimary()) {
+    const rw = await createUserOnRemnawave(userDataPrimary);
+    results.url1 = rw.subscriptionUrl;
+    results.remnawaveUuid = rw.uuid;
+  } else if (!MARZBAN_API_URL || MARZBAN_API_URL === "your_marzban_api_url") {
     console.log("[Marzban] Primary API not configured, skipping");
     results.url1 = `https://fake-vpn.local/subscription/${userData.username}`;
   } else {
-    // Создаем на основном сервере с обоими inbounds
     results.url1 = await createUserOnMarzbanServer(MARZBAN_API_URL, MARZBAN_TOKEN, userDataPrimary);
   }
 
-  // Создаем на втором сервере (rus2) только с VLESS TCP REALITY
   if (!MARZBAN_API_URL_2) {
     console.log("[Marzban] Secondary API not configured, skipping");
   } else {
     const url2Raw = await createUserOnMarzbanServer(MARZBAN_API_URL_2, MARZBAN_TOKEN_2, userDataSecondary);
-    // Преобразуем ссылку для rus2 сервера
     results.url2 = convertToRus2Url(url2Raw) || url2Raw;
   }
 
@@ -108,26 +291,23 @@ async function createMarzbanUserOnBothServers(userData) {
 }
 
 /**
- * Продлевает подписку пользователя на обоих Marzban серверах
- * @param {string} username - Имя пользователя в Marzban
- * @param {number} days - Количество дней для продления
- * @returns {Promise<{success1: boolean, success2: boolean}>} - Результаты продления на каждом сервере
+ * Продлевает подписку: primary = Remnawave или Marzban; secondary = Marzban
+ * @param {object} [opts]
+ * @param {string|null} [opts.remnawaveUuid] — для Remnawave (из Subscription.remnawaveUuid)
  */
-async function extendMarzbanUserOnBothServers(username, days) {
+async function extendMarzbanUserOnBothServers(username, days, opts = {}) {
   const results = { success1: false, success2: false };
 
-  // Продление на основном сервере
-  if (MARZBAN_API_URL && MARZBAN_API_URL !== "your_marzban_api_url") {
+  if (useRemnawavePrimary()) {
+    results.success1 = await extendRemnawaveUser(username, days, opts);
+  } else if (MARZBAN_API_URL && MARZBAN_API_URL !== "your_marzban_api_url") {
     try {
-      const response = await fetch(
-        `${MARZBAN_API_URL}/users/${username}/extend?days=${days}`,
-        {
-          method: "POST",
-          headers: {
-            ...(MARZBAN_TOKEN ? { "Authorization": `Bearer ${MARZBAN_TOKEN}` } : {})
-          }
-        }
-      );
+      const response = await fetch(`${MARZBAN_API_URL}/users/${encodeURIComponent(username)}/extend?days=${days}`, {
+        method: "POST",
+        headers: {
+          ...(MARZBAN_TOKEN ? { Authorization: `Bearer ${MARZBAN_TOKEN}` } : {}),
+        },
+      });
 
       if (response.ok) {
         results.success1 = true;
@@ -141,16 +321,15 @@ async function extendMarzbanUserOnBothServers(username, days) {
     }
   }
 
-  // Продление на втором сервере
   if (MARZBAN_API_URL_2) {
     try {
       const response = await fetch(
-        `${MARZBAN_API_URL_2}/users/${username}/extend?days=${days}`,
+        `${MARZBAN_API_URL_2}/users/${encodeURIComponent(username)}/extend?days=${days}`,
         {
           method: "POST",
           headers: {
-            ...(MARZBAN_TOKEN_2 ? { "Authorization": `Bearer ${MARZBAN_TOKEN_2}` } : {})
-          }
+            ...(MARZBAN_TOKEN_2 ? { Authorization: `Bearer ${MARZBAN_TOKEN_2}` } : {}),
+          },
         }
       );
 
@@ -173,5 +352,5 @@ module.exports = {
   createMarzbanUserOnBothServers,
   createUserOnMarzbanServer,
   convertToRus2Url,
-  extendMarzbanUserOnBothServers
+  extendMarzbanUserOnBothServers,
 };

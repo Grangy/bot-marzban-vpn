@@ -67,6 +67,7 @@ model Subscription {
   user            User             @relation(fields: [userId], references: [id])
   subscriptionUrl String?          // 🔥 основная ссылка (vpn.grangy.ru)
   subscriptionUrl2 String?         // 🔥 вторая ссылка для rus2 (rus2.grangy.ru:8888)
+  remnawaveUuid   String?         // UUID в Remnawave Panel (продление PATCH /v1/users/:uuid/extend)
   notified3Days            Boolean   @default(false)  // уведомление за 3 дня отправлено
   notified1Day             Boolean   @default(false)  // уведомление за 1 день отправлено
   lastExpiredReminderAt    DateTime?   
