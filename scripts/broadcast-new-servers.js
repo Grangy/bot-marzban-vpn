@@ -25,11 +25,17 @@ async function tgSendMessage(chatId, text, extra = {}) {
     text,
     ...extra,
   };
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 15_000);
+  const res = await fetch(
+    url,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    }
+  ).finally(() => clearTimeout(t));
   const json = await res.json().catch(() => null);
   if (!res.ok || !json?.ok) {
     const desc = json?.description || `HTTP ${res.status}`;
@@ -64,7 +70,7 @@ async function main() {
     `🚀 <b>Обновление серверов MaxGroot</b>\n\n` +
     `Мы обновили сервера и улучшили стабильность.\n\n` +
     `✅ <b>Пожалуйста, обновите подписку</b> в разделе <b>«📦 Мои подписки»</b> в боте\n` +
-    `или обновите конфигурацию в приложении Happ.\n\n` +
+    `или обновите конфигурацию в приложении в телеграмме и добавьте новую ссылку в Happ.\n\n` +
     `Если что-то не работает — пишите в поддержку: @supmaxgroot 🙌`;
 
   const keyboard = {
@@ -79,6 +85,9 @@ async function main() {
       stats.sent++;
     } catch (e) {
       stats.failed++;
+    }
+    if ((stats.sent + stats.failed) % 100 === 0) {
+      console.log(JSON.stringify({ progress: stats.sent + stats.failed, ...stats }));
     }
     // Бережный лимит к Telegram
     await sleep(60);
