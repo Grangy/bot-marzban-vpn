@@ -5,7 +5,11 @@ const { mainMenu, planSelectedMenu, PLANS, ruMoney, getPlanPrice, getDiscountBan
 const { registerActions } = require("./actions");
 const { registerPromo } = require("./promo");
 const { redeemClaim } = require("./hp-claim");
-const { setRemnawaveTelegram, addRemnawaveTrafficGb } = require("./marzban-utils");
+const {
+  setRemnawaveTelegram,
+  addRemnawaveTrafficGb,
+  remnawaveResolveUuidByUsername,
+} = require("./marzban-utils");
 const crypto = require("crypto");
 
 
@@ -151,9 +155,22 @@ bot.start(async (ctx) => {
 
       if (!subscriptionUuid) throw new Error("redeem ok but missing subscriptionUuid");
 
-      await setRemnawaveTelegram(subscriptionUuid, telegramId, username);
+      let remnawaveUuid = subscriptionUuid;
+      try {
+        await setRemnawaveTelegram(remnawaveUuid, telegramId, username);
+      } catch (e) {
+        const msg = String(e?.message || e || "");
+        const notFound = msg.includes("REMNAWAVE_TELEGRAM_FAILED 404");
+        if (!notFound) throw e;
+        if (!trialUsername) throw e;
+        const resolved = await remnawaveResolveUuidByUsername(trialUsername);
+        if (!resolved) throw e;
+        remnawaveUuid = resolved;
+        await setRemnawaveTelegram(remnawaveUuid, telegramId, username);
+      }
+
       // начисление трафика (endpoint должен быть в remnawave-api)
-      await addRemnawaveTrafficGb(subscriptionUuid, bonusGb);
+      await addRemnawaveTrafficGb(remnawaveUuid, bonusGb);
 
       const nameLine = trialUsername ? `\n👤 Подписка: ${trialUsername}` : "";
       await ctx.reply(

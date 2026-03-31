@@ -400,4 +400,5 @@ module.exports = {
   extendMarzbanUserOnBothServers,
   setRemnawaveTelegram,
   addRemnawaveTrafficGb,
+  remnawaveResolveUuidByUsername,
 };
