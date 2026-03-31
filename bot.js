@@ -124,13 +124,32 @@ bot.start(async (ctx) => {
       const username = ctx.from?.username || null;
 
       const redeemed = await redeemClaim({ token, telegramId, username });
-      const subscriptionUuid = redeemed.subscriptionUuid;
-      const trialUsername = redeemed.trialUsername;
-      const bonusGb = redeemed.bonusGb ?? 1;
-
-      if (!subscriptionUuid) {
-        throw new Error("redeem response missing subscriptionUuid");
+      if (!redeemed.ok) {
+        if (redeemed.status === 409) {
+          await ctx.reply("✅ Бонус уже получали ранее.", mainMenu(user.balance));
+          return;
+        }
+        if (redeemed.status === 410) {
+          await ctx.reply("⏳ Токен истёк. Вернитесь на сайт и получите новый.", mainMenu(user.balance));
+          return;
+        }
+        if (redeemed.status === 404) {
+          await ctx.reply("❌ Токен неверный. Проверьте ссылку и попробуйте снова.", mainMenu(user.balance));
+          return;
+        }
+        if (redeemed.status === 401) {
+          await ctx.reply("❌ Ошибка конфигурации (ключ сайта не совпадает). Сообщите администратору.", mainMenu(user.balance));
+          return;
+        }
+        throw new Error(`redeem failed: ${redeemed.status} ${String(redeemed.text || '').slice(0, 200)}`);
       }
+
+      const body = redeemed.data || {};
+      const subscriptionUuid = body.subscriptionUuid;
+      const trialUsername = body.trialUsername;
+      const bonusGb = body.bonusGb ?? 1;
+
+      if (!subscriptionUuid) throw new Error("redeem ok but missing subscriptionUuid");
 
       await setRemnawaveTelegram(subscriptionUuid, telegramId, username);
       // начисление трафика (endpoint должен быть в remnawave-api)

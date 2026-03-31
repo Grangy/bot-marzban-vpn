@@ -28,11 +28,12 @@ async function redeemClaim({ token, telegramId, username }) {
     // ignore
   }
 
-  if (!res.ok) {
-    throw new Error(`CLAIM_REDEEM_FAILED ${res.status}: ${text.slice(0, 300)}`);
-  }
-
-  return json || {};
+  return {
+    ok: res.ok,
+    status: res.status,
+    data: json,
+    text,
+  };
 }
 
 module.exports = { redeemClaim };
