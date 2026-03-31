@@ -33,6 +33,7 @@
     createMarzbanUserOnBothServers,
     extendMarzbanUserOnBothServers,
     remnawaveGetUser,
+    remnawaveCreateUser,
   } = require("./marzban-utils");
 
   // Хранилище состояний настройки после покупки: chatId -> { subscriptionId, step, device }
@@ -828,6 +829,36 @@ return tx.subscription.update({
           }
         } catch (e) {
           console.warn("[Extend] Failed to refresh sub url from Remnawave:", e?.message || e);
+        }
+      }
+
+      // Если у подписки осталось ограничение по трафику в Remnawave (trial),
+      // то при продлении заменяем её на "безлимитную" (trafficLimitBytes=0) через пересоздание юзера.
+      // Это даёт новую ссылку sub.maxg.ch, но сохраняет тот же срок окончания (newEndDate).
+      if (sub.remnawaveUuid) {
+        try {
+          const current = await remnawaveGetUser(sub.remnawaveUuid);
+          const tlb = Number(current?.raw?.user?.response?.trafficLimitBytes ?? current?.raw?.user?.trafficLimitBytes);
+          if (Number.isFinite(tlb) && tlb > 0) {
+            const msLeft = newEndDate.getTime() - Date.now();
+            const daysLeft = Math.max(1, Math.ceil(msLeft / 86400000));
+            const rand = Math.random().toString(16).slice(2, 8);
+            const newUsername = `${ctx.dbUser.telegramId}_${sub.type}_${sub.id}_u${rand}`;
+            const created = await remnawaveCreateUser({ username: newUsername, days: daysLeft, gb: 0 });
+            if (created?.uuid && created?.subscriptionUrl) {
+              await prisma.subscription.update({
+                where: { id },
+                data: {
+                  remnawaveUuid: created.uuid,
+                  subscriptionUrl: created.subscriptionUrl,
+                  subscriptionUrl2: null,
+                },
+              });
+              refreshedUrl = created.subscriptionUrl;
+            }
+          }
+        } catch (e) {
+          console.warn("[Extend] Failed to remove traffic limit by recreating user:", e?.message || e);
         }
       }
 

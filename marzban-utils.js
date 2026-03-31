@@ -293,6 +293,47 @@ async function remnawaveAddTrafficGb(idOrUsername, gb) {
 }
 
 /**
+ * Создать пользователя в Remnawave с заданными days/gb.
+ * Возвращает { uuid, subscriptionUrl }.
+ */
+async function remnawaveCreateUser({ username, days, gb = 0, subscriptionType }) {
+  if (!useRemnawavePrimary()) throw new Error("Remnawave not configured");
+  const u = String(username || "").trim();
+  if (!u) throw new Error("username is required");
+  const d = Number(days);
+  if (!Number.isFinite(d) || d <= 0) throw new Error("days must be > 0");
+  const g = Number(gb);
+  if (!Number.isFinite(g) || g < 0) throw new Error("gb must be >= 0");
+
+  const payload = {
+    username: u,
+    days: Math.floor(d),
+    gb: g,
+    subscriptionType: subscriptionType || REMNAWAVE_SUBSCRIPTION_TYPE,
+  };
+  const dl = remnawaveDeviceLimit();
+  if (dl !== undefined) payload.deviceLimit = dl;
+
+  const res = await fetch(`${REMNAWAVE_API_URL}/v1/users`, {
+    method: "POST",
+    headers: remnawaveHeaders(),
+    body: JSON.stringify(payload),
+  });
+  const text = await res.text();
+  let json = {};
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    json = {};
+  }
+  if (!res.ok) throw new Error(`REMNAWAVE_CREATE_FAILED ${res.status}: ${text.slice(0, 300)}`);
+  return {
+    uuid: pickUuidFromRemnawaveBody(json),
+    subscriptionUrl: pickSubscriptionUrlFromRemnawaveBody(json),
+  };
+}
+
+/**
  * Преобразует subscription_url от Marzban API в ссылку для rus2 сервера
  */
 function convertToRus2Url(originalUrl) {
@@ -504,4 +545,5 @@ module.exports = {
   remnawaveResolveUuidByUsername,
   remnawaveGetUser,
   remnawaveAddTrafficGb,
+  remnawaveCreateUser,
 };
