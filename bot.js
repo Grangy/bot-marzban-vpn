@@ -5,7 +5,7 @@ const { mainMenu, planSelectedMenu, PLANS, ruMoney, getPlanPrice, getDiscountBan
 const { registerActions } = require("./actions");
 const { registerPromo } = require("./promo");
 const { redeemClaim } = require("./hp-claim");
-const { remnawaveGetUser, remnawaveResolveUuidByUsername } = require("./marzban-utils");
+const { remnawaveGetUser, remnawaveResolveUuidByUsername, remnawaveAddTrafficGb } = require("./marzban-utils");
 const crypto = require("crypto");
 
 
@@ -215,9 +215,17 @@ bot.start(async (ctx) => {
         },
       });
 
+      // После первой привязки — добавляем +1GB трафика в Remnawave (новый endpoint)
+      let bonusOk = false;
+      try {
+        bonusOk = await remnawaveAddTrafficGb(remnawaveUuid, 1);
+      } catch (e) {
+        console.warn("[CLAIM] add-traffic failed:", e?.message || e);
+      }
+
       const nameLine = usedName ? `\n👤 Подписка: ${usedName}` : "";
       await ctx.reply(
-        `✅ Подписка привязана к Telegram.\n${nameLine}\n\nОткройте «Мои подписки» и нажмите «Подключить».`,
+        `✅ Подписка привязана к Telegram.${bonusOk ? "\n🎁 Начислено +1GB трафика." : ""}\n${nameLine}\n\nОткройте «Мои подписки» и нажмите «Подключить».`,
         mainMenu(user.balance)
       );
       return;

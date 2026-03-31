@@ -262,6 +262,37 @@ async function remnawaveGetUser(idOrUsername) {
 }
 
 /**
+ * Добавить трафик пользователю (PATCH /v1/users/:id/add-traffic)
+ * :id может быть uuid или username
+ */
+async function remnawaveAddTrafficGb(idOrUsername, gb) {
+  const id = String(idOrUsername || "").trim();
+  if (!id) throw new Error("idOrUsername is required");
+  if (!useRemnawavePrimary()) throw new Error("Remnawave not configured");
+  const n = Number(gb);
+  if (!Number.isFinite(n) || n <= 0) throw new Error("gb must be > 0");
+
+  const url = `${REMNAWAVE_API_URL}/v1/users/${encodeURIComponent(id)}/add-traffic`;
+  const body = JSON.stringify({ gb: n });
+
+  let lastText = "";
+  const maxAttempts = 12;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const res = await fetch(url, { method: "PATCH", headers: remnawaveHeaders(), body });
+    lastText = await res.text();
+    if (res.ok) return true;
+
+    const maybeSyncDelay = res.status === 404 && lastText.includes("Not found") && attempt < maxAttempts;
+    if (maybeSyncDelay) {
+      await new Promise((r) => setTimeout(r, 2000));
+      continue;
+    }
+    throw new Error(`REMNAWAVE_ADD_TRAFFIC_FAILED ${res.status}: ${lastText.slice(0, 300)}`);
+  }
+  throw new Error(`REMNAWAVE_ADD_TRAFFIC_FAILED 404: ${lastText.slice(0, 300)}`);
+}
+
+/**
  * Преобразует subscription_url от Marzban API в ссылку для rus2 сервера
  */
 function convertToRus2Url(originalUrl) {
@@ -472,4 +503,5 @@ module.exports = {
   extendMarzbanUserOnBothServers,
   remnawaveResolveUuidByUsername,
   remnawaveGetUser,
+  remnawaveAddTrafficGb,
 };
