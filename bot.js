@@ -187,21 +187,33 @@ bot.start(async (ctx) => {
       if (!remnawaveUuid) throw new Error("Cannot resolve Remnawave uuid for claim");
 
       // Привязываем подписку к пользователю в нашей БД:
-      // создаём запись Subscription, если её ещё нет у этого пользователя
-      const already = await prisma.subscription.findFirst({
-        where: { userId: user.id, remnawaveUuid },
-      });
-      if (!already) {
-        await prisma.subscription.create({
-          data: {
-            userId: user.id,
-            type: "FREE",
-            remnawaveUuid,
-            subscriptionUrl: subscriptionUrl,
-            endDate: endDate,
-          },
-        });
+      // 1) одна remnawaveUuid может быть привязана только к одному userId
+      const existing = await prisma.subscription.findFirst({ where: { remnawaveUuid } });
+      if (existing) {
+        if (existing.userId === user.id) {
+          await ctx.reply(
+            "✅ Ваша подписка уже есть в разделе «Мои подписки».",
+            mainMenu(user.balance)
+          );
+          return;
+        }
+        await ctx.reply(
+          "❌ Эта подписка уже привязана к другому Telegram аккаунту.",
+          mainMenu(user.balance)
+        );
+        return;
       }
+
+      // 2) если такой привязки ещё нет — создаём Subscription
+      await prisma.subscription.create({
+        data: {
+          userId: user.id,
+          type: "FREE",
+          remnawaveUuid,
+          subscriptionUrl: subscriptionUrl,
+          endDate: endDate,
+        },
+      });
 
       const nameLine = usedName ? `\n👤 Подписка: ${usedName}` : "";
       await ctx.reply(
