@@ -672,17 +672,13 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
       }
 
       // Сортировка:
-      // 1) активные (endDate == null или > now) сверху
-      // 2) активные по ближайшему окончанию (asc)
-      // 3) неактивные по более позднему окончанию (desc)
+      // 1) "∞" (endDate == null) наверху
+      // 2) дальше дата окончания выше (desc)
       const sorted = [...subs].sort((a, b) => {
-        const aActive = !a.endDate || new Date(a.endDate) > now;
-        const bActive = !b.endDate || new Date(b.endDate) > now;
-        if (aActive !== bActive) return aActive ? -1 : 1;
         const aEnd = a.endDate ? new Date(a.endDate).getTime() : Number.POSITIVE_INFINITY;
         const bEnd = b.endDate ? new Date(b.endDate).getTime() : Number.POSITIVE_INFINITY;
-        if (aActive && bActive) return aEnd - bEnd;
-        return bEnd - aEnd;
+        if (aEnd !== bEnd) return bEnd - aEnd;
+        return (b.id || 0) - (a.id || 0);
       });
 
       const total = sorted.length;
@@ -695,7 +691,8 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
         const active = !s.endDate || new Date(s.endDate) > now;
         const statusEmoji = active ? "🟢" : "🔴";
         const suffix = s.endDate ? `до ${formatDate(s.endDate)}` : "∞";
-        return [cb(`${statusEmoji} ${label} ${suffix}`, `sub_${s.id}_p_${safePage}`, "primary")];
+        const inactiveTag = active ? "" : " (неактивна)";
+        return [cb(`${statusEmoji} ${label}${inactiveTag} ${suffix}`, `sub_${s.id}_p_${safePage}`, "primary")];
       });
 
       const nav = [];
