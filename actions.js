@@ -705,9 +705,8 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
 
       const buttons = [[cb("⬅️ Назад", "my_subs")]];
 
-      if (s.type !== "FREE") {
-        buttons.unshift([cb("🔄 Продлить", `extend_choose_${s.id}`, "success")]);
-      }
+      // Продление доступно для любых подписок, включая FREE (trial), если есть remnawaveUuid/subscriptionUrl
+      buttons.unshift([cb("🔄 Продлить", `extend_choose_${s.id}`, "success")]);
 
       await editOrAnswer(ctx, text, Markup.inlineKeyboard(buttons));
     });
