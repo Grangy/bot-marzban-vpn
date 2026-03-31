@@ -651,9 +651,12 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
 
 
 
-    // Мои подписки — список
-    bot.action("my_subs", async (ctx) => {
+    // Мои подписки — список (пагинация)
+    bot.action(/^my_subs(?:_p_(\d+))?$/, async (ctx) => {
       await safeAnswerCbQuery(ctx);
+      const page = Math.max(0, parseInt(ctx.match?.[1] || "0", 10) || 0);
+      const PAGE_SIZE = 5;
+      const now = new Date();
 
       const subs = await prisma.subscription.findMany({
         where: { userId: ctx.dbUser.id },
@@ -668,26 +671,53 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
         return;
       }
 
-  const buttons = subs.map((s) => {
-    const label = getDisplayLabel(s);
-    const suffix = s.endDate ? `до ${formatDate(s.endDate)}` : "∞";
-    return [cb(`${label} ${suffix}`, `sub_${s.id}`, "primary")];
-  });
+      // Сортировка:
+      // 1) активные (endDate == null или > now) сверху
+      // 2) активные по ближайшему окончанию (asc)
+      // 3) неактивные по более позднему окончанию (desc)
+      const sorted = [...subs].sort((a, b) => {
+        const aActive = !a.endDate || new Date(a.endDate) > now;
+        const bActive = !b.endDate || new Date(b.endDate) > now;
+        if (aActive !== bActive) return aActive ? -1 : 1;
+        const aEnd = a.endDate ? new Date(a.endDate).getTime() : Number.POSITIVE_INFINITY;
+        const bEnd = b.endDate ? new Date(b.endDate).getTime() : Number.POSITIVE_INFINITY;
+        if (aActive && bActive) return aEnd - bEnd;
+        return bEnd - aEnd;
+      });
 
+      const total = sorted.length;
+      const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+      const safePage = Math.min(page, totalPages - 1);
+      const slice = sorted.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+
+      const buttons = slice.map((s) => {
+        const label = getDisplayLabel(s);
+        const active = !s.endDate || new Date(s.endDate) > now;
+        const statusEmoji = active ? "🟢" : "🔴";
+        const suffix = s.endDate ? `до ${formatDate(s.endDate)}` : "∞";
+        return [cb(`${statusEmoji} ${label} ${suffix}`, `sub_${s.id}_p_${safePage}`, "primary")];
+      });
+
+      const nav = [];
+      if (safePage > 0) nav.push(cb("⬅️", `my_subs_p_${safePage - 1}`));
+      nav.push(cb(`Стр. ${safePage + 1}/${totalPages}`, `my_subs_p_${safePage}`));
+      if (safePage < totalPages - 1) nav.push(cb("➡️", `my_subs_p_${safePage + 1}`));
+      buttons.push(nav);
 
       buttons.push([cb("⬅️ Назад", "back")]);
 
       await editOrAnswer(
         ctx,
-        "📦 Ваши подписки:",
+        "📦 Ваши подписки:\n🟢 активная · 🔴 неактивная",
         Markup.inlineKeyboard(buttons)
       );
     });
 
     // Подробности подписки
-    bot.action(/sub_(\d+)/, async (ctx) => {
+    bot.action(/sub_(\d+)_p_(\d+)/, async (ctx) => {
       await safeAnswerCbQuery(ctx);
       const id = parseInt(ctx.match[1], 10);
+      const page = Math.max(0, parseInt(ctx.match[2] || "0", 10) || 0);
       const s = await prisma.subscription.findUnique({ where: { id } });
 
       if (!s || s.userId !== ctx.dbUser.id) {
@@ -708,7 +738,7 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
         text += `\n\n🔗 Ссылка для операторов МТС, Миранда и других: ${s.subscriptionUrl2}`;
       }
 
-      const buttons = [[cb("⬅️ Назад", "my_subs")]];
+      const buttons = [[cb("⬅️ Назад", `my_subs_p_${page}`)]];
 
       // Продление доступно для любых подписок, включая FREE (trial), если есть remnawaveUuid/subscriptionUrl
       buttons.unshift([cb("🔄 Продлить", `extend_choose_${s.id}`, "success")]);
@@ -734,7 +764,9 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
       return [cb(`${plan.label} — ${ruMoney(price)}`, `extend_${id}_${plan.type}`, "primary")];
     });
 
-    buttons.push([cb("⬅️ Назад", `sub_${id}`)]);
+    // Возврат в карточку подписки без привязки к странице списка
+    // (в карточку можно попасть из разных мест)
+    buttons.push([cb("⬅️ Назад", `sub_${id}_p_0`)]);
 
     const bannerExt2 = getDiscountBanner();
     const extendText = bannerExt2 ? `Выберите срок продления:\n\n${bannerExt2}` : "Выберите срок продления:";
