@@ -366,10 +366,21 @@ async function setRemnawaveTelegram(remnawaveUuid, telegramId, username) {
     username: username || null,
   });
 
-  const res = await fetch(url, { method: "PATCH", headers: remnawaveHeaders(), body });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`REMNAWAVE_TELEGRAM_FAILED ${res.status}: ${text.slice(0, 300)}`);
-  return text;
+  let lastText = "";
+  const maxAttempts = 12;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const res = await fetch(url, { method: "PATCH", headers: remnawaveHeaders(), body });
+    lastText = await res.text();
+    if (res.ok) return lastText;
+
+    const maybeSyncDelay = res.status === 404 && lastText.includes("Not found") && attempt < maxAttempts;
+    if (maybeSyncDelay) {
+      await new Promise((r) => setTimeout(r, 2000));
+      continue;
+    }
+    throw new Error(`REMNAWAVE_TELEGRAM_FAILED ${res.status}: ${lastText.slice(0, 300)}`);
+  }
+  throw new Error(`REMNAWAVE_TELEGRAM_FAILED 404: ${lastText.slice(0, 300)}`);
 }
 
 /**
@@ -387,10 +398,21 @@ async function addRemnawaveTrafficGb(remnawaveUuid, gb) {
   const url = `${REMNAWAVE_API_URL}/v1/users/${encodeURIComponent(uuid)}/traffic-bonus`;
   const body = JSON.stringify({ gb: n });
 
-  const res = await fetch(url, { method: "PATCH", headers: remnawaveHeaders(), body });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`REMNAWAVE_TRAFFIC_FAILED ${res.status}: ${text.slice(0, 300)}`);
-  return text;
+  let lastText = "";
+  const maxAttempts = 12;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const res = await fetch(url, { method: "PATCH", headers: remnawaveHeaders(), body });
+    lastText = await res.text();
+    if (res.ok) return lastText;
+
+    const maybeSyncDelay = res.status === 404 && lastText.includes("Not found") && attempt < maxAttempts;
+    if (maybeSyncDelay) {
+      await new Promise((r) => setTimeout(r, 2000));
+      continue;
+    }
+    throw new Error(`REMNAWAVE_TRAFFIC_FAILED ${res.status}: ${lastText.slice(0, 300)}`);
+  }
+  throw new Error(`REMNAWAVE_TRAFFIC_FAILED 404: ${lastText.slice(0, 300)}`);
 }
 
 module.exports = {

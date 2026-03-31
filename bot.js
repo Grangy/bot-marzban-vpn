@@ -152,6 +152,11 @@ bot.start(async (ctx) => {
       const subscriptionUuid = body.subscriptionUuid;
       const trialUsername = body.trialUsername;
       const bonusGb = body.bonusGb ?? 1;
+      console.log("[CLAIM] redeem ok:", {
+        hasSubscriptionUuid: Boolean(subscriptionUuid),
+        trialUsername: trialUsername || null,
+        bonusGb,
+      });
 
       if (!subscriptionUuid) throw new Error("redeem ok but missing subscriptionUuid");
 
