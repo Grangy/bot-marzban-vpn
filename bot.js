@@ -162,8 +162,12 @@ bot.start(async (ctx) => {
         const msg = String(e?.message || e || "");
         const notFound = msg.includes("REMNAWAVE_TELEGRAM_FAILED 404");
         if (!notFound) throw e;
-        if (!trialUsername) throw e;
-        const resolved = await remnawaveResolveUuidByUsername(trialUsername);
+        const candidates = [trialUsername, subscriptionUuid].filter((s) => typeof s === "string" && s.trim());
+        let resolved = null;
+        for (const c of candidates) {
+          resolved = await remnawaveResolveUuidByUsername(c);
+          if (resolved) break;
+        }
         if (!resolved) throw e;
         remnawaveUuid = resolved;
         await setRemnawaveTelegram(remnawaveUuid, telegramId, username);
