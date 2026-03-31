@@ -5,11 +5,7 @@ const { mainMenu, planSelectedMenu, PLANS, ruMoney, getPlanPrice, getDiscountBan
 const { registerActions } = require("./actions");
 const { registerPromo } = require("./promo");
 const { redeemClaim } = require("./hp-claim");
-const {
-  setRemnawaveTelegram,
-  addRemnawaveTrafficGb,
-  remnawaveResolveUuidByUsername,
-} = require("./marzban-utils");
+const { remnawaveGetUser, remnawaveResolveUuidByUsername } = require("./marzban-utils");
 const crypto = require("crypto");
 
 
@@ -129,10 +125,16 @@ bot.start(async (ctx) => {
       const username = ctx.from?.username || null;
 
       // Variant A: claimArg == Remnawave username (например: trial_dd3f4f2251f2)
-      const resolvedUuid = await remnawaveResolveUuidByUsername(claimArg);
-      let remnawaveUuid = resolvedUuid;
-      let usedName = claimArg;
-      let bonusGb = 1;
+      // Привязка делается В БД БОТА (без PATCH в Remnawave)
+      const rwUser = await remnawaveGetUser(claimArg);
+      let remnawaveUuid = rwUser?.uuid || null;
+      let usedName = rwUser?.username || claimArg;
+      let subscriptionUrl = rwUser?.subscriptionUrl || null;
+      let endDate = null;
+      if (rwUser?.expireAt) {
+        const d = new Date(rwUser.expireAt);
+        if (!Number.isNaN(d.getTime())) endDate = d;
+      }
 
       // Fallback: legacy redeem (Variant B) — если username не найден
       if (!remnawaveUuid) {
@@ -169,22 +171,41 @@ bot.start(async (ctx) => {
 
         const candidates = [trialUsername, subscriptionUuid].filter((s) => typeof s === "string" && s.trim());
         for (const c of candidates) {
-          remnawaveUuid = await remnawaveResolveUuidByUsername(c);
-          if (remnawaveUuid) {
-            usedName = c;
-            break;
+          const info = await remnawaveGetUser(c);
+          if (!info?.uuid) continue;
+          remnawaveUuid = info.uuid;
+          usedName = info.username || c;
+          subscriptionUrl = info.subscriptionUrl || subscriptionUrl;
+          if (info.expireAt) {
+            const d = new Date(info.expireAt);
+            if (!Number.isNaN(d.getTime())) endDate = d;
           }
+          break;
         }
       }
 
       if (!remnawaveUuid) throw new Error("Cannot resolve Remnawave uuid for claim");
 
-      await setRemnawaveTelegram(remnawaveUuid, telegramId, username);
-      await addRemnawaveTrafficGb(remnawaveUuid, bonusGb);
+      // Привязываем подписку к пользователю в нашей БД:
+      // создаём запись Subscription, если её ещё нет у этого пользователя
+      const already = await prisma.subscription.findFirst({
+        where: { userId: user.id, remnawaveUuid },
+      });
+      if (!already) {
+        await prisma.subscription.create({
+          data: {
+            userId: user.id,
+            type: "FREE",
+            remnawaveUuid,
+            subscriptionUrl: subscriptionUrl,
+            endDate: endDate,
+          },
+        });
+      }
 
       const nameLine = usedName ? `\n👤 Подписка: ${usedName}` : "";
       await ctx.reply(
-        `✅ Подписка привязана к Telegram и бонус начислен.\n🎁 +${bonusGb} GB${nameLine}\n\nОткройте «Мои подписки» и нажмите «Подключить».`,
+        `✅ Подписка привязана к Telegram.\n${nameLine}\n\nОткройте «Мои подписки» и нажмите «Подключить».`,
         mainMenu(user.balance)
       );
       return;

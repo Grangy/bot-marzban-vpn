@@ -223,6 +223,44 @@ async function extendRemnawaveUser(username, days, opts = {}) {
   }
 }
 
+async function remnawaveGetUser(idOrUsername) {
+  const id = String(idOrUsername || "").trim();
+  if (!id) return null;
+  if (!useRemnawavePrimary()) throw new Error("Remnawave not configured");
+  const url = `${REMNAWAVE_API_URL}/v1/users/${encodeURIComponent(id)}`;
+
+  let lastText = "";
+  const maxAttempts = 12;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const r = await fetch(url, { headers: { "x-api-key": REMNAWAVE_API_KEY } });
+    lastText = await r.text();
+    let json;
+    try {
+      json = lastText ? JSON.parse(lastText) : {};
+    } catch {
+      json = {};
+    }
+    if (r.ok && json.user) {
+      const inner = remnawaveUserPayload(json.user);
+      return {
+        uuid: pickUuidFromRemnawaveBody(json),
+        username: typeof inner?.username === "string" ? inner.username : null,
+        subscriptionUrl: pickSubscriptionUrlFromRemnawaveBody(json),
+        expireAt: inner?.expireAt || inner?.expire_at || null,
+        raw: json,
+      };
+    }
+
+    const maybeSyncDelay = r.status === 404 && lastText.includes("Not found") && attempt < maxAttempts;
+    if (maybeSyncDelay) {
+      await new Promise((res) => setTimeout(res, 2000));
+      continue;
+    }
+    return null;
+  }
+  return null;
+}
+
 /**
  * Преобразует subscription_url от Marzban API в ссылку для rus2 сервера
  */
@@ -432,7 +470,6 @@ module.exports = {
   createUserOnMarzbanServer,
   convertToRus2Url,
   extendMarzbanUserOnBothServers,
-  setRemnawaveTelegram,
-  addRemnawaveTrafficGb,
   remnawaveResolveUuidByUsername,
+  remnawaveGetUser,
 };
