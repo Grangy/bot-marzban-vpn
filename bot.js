@@ -153,7 +153,7 @@ bot.start(async (ctx) => {
       const trialUsername = body.trialUsername;
       const bonusGb = body.bonusGb ?? 1;
       console.log("[CLAIM] redeem ok:", {
-        hasSubscriptionUuid: Boolean(subscriptionUuid),
+        subscriptionUuidPreview: typeof subscriptionUuid === "string" ? subscriptionUuid.slice(0, 32) : null,
         trialUsername: trialUsername || null,
         bonusGb,
       });
@@ -189,7 +189,12 @@ bot.start(async (ctx) => {
       return;
     } catch (e) {
       console.error("[CLAIM] /start hp_claim error:", e);
-      await ctx.reply(`❌ Не удалось активировать токен.\n${e.message || e}`, mainMenu(user.balance));
+      const msg = String(e?.message || e || "");
+      const extra =
+        msg.includes("REMNAWAVE_TELEGRAM_FAILED 404") || msg.includes("REMNAWAVE_TRAFFIC_FAILED 404")
+          ? "\n\nПохоже, Remnawave ещё не видит созданную подписку. Откройте ссылку подписки с сайта (sub.maxg.ch/...) и повторите запуск из Telegram. Если повторяется — сайту нужно отдавать remnawaveUuid (или username) в ответе redeem."
+          : "";
+      await ctx.reply(`❌ Не удалось активировать токен.\n${msg}${extra}`, mainMenu(user.balance));
       return;
     }
   }
