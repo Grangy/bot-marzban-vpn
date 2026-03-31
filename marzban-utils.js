@@ -4,8 +4,10 @@
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 const MARZBAN_API_URL = process.env.MARZBAN_API_URL;
-// В режиме "только Remnawave" второй Marzban не должен дергаться по умолчанию.
-// Поэтому НЕ используем дефолтный URL, только явная настройка через .env.
+// Сервер 2 (rus2) больше не выдаём для новых подписок.
+// Старые subscriptionUrl2 в БД остаются и могут отображаться, но новые не формируем.
+// Если когда-либо понадобится вернуть — выставить ENABLE_SERVER2=true и заполнить MARZBAN_API_URL_2.
+const ENABLE_SERVER2 = String(process.env.ENABLE_SERVER2 || "").toLowerCase() === "true";
 const MARZBAN_API_URL_2 = process.env.MARZBAN_API_URL_2 || "";
 const MARZBAN_TOKEN = process.env.MARZBAN_TOKEN;
 const MARZBAN_TOKEN_2 = process.env.MARZBAN_TOKEN_2 || process.env.MARZBAN_TOKEN;
@@ -280,11 +282,12 @@ async function createMarzbanUserOnBothServers(userData) {
     results.url1 = await createUserOnMarzbanServer(MARZBAN_API_URL, MARZBAN_TOKEN, userDataPrimary);
   }
 
-  if (!MARZBAN_API_URL_2) {
-    console.log("[Marzban] Secondary API not configured, skipping");
-  } else {
+  // Сервер 2 больше не создаём по умолчанию
+  if (ENABLE_SERVER2 && MARZBAN_API_URL_2) {
     const url2Raw = await createUserOnMarzbanServer(MARZBAN_API_URL_2, MARZBAN_TOKEN_2, userDataSecondary);
     results.url2 = convertToRus2Url(url2Raw) || url2Raw;
+  } else {
+    results.url2 = null;
   }
 
   return results;
