@@ -29,7 +29,11 @@
     urlBtn,
   } = require("./menus");
   const MARZBAN_API_URL = process.env.MARZBAN_API_URL;
-  const { createMarzbanUserOnBothServers, extendMarzbanUserOnBothServers } = require("./marzban-utils");
+  const {
+    createMarzbanUserOnBothServers,
+    extendMarzbanUserOnBothServers,
+    remnawaveGetUser,
+  } = require("./marzban-utils");
 
   // Хранилище состояний настройки после покупки: chatId -> { subscriptionId, step, device }
   const setupStates = new Map();
@@ -807,6 +811,26 @@ return tx.subscription.update({
         }
       }
 
+      // После продления — подтягиваем актуальную ссылку Remnawave (sub.maxg.ch) и заменяем в БД
+      let refreshedUrl = null;
+      if (sub.remnawaveUuid) {
+        try {
+          const info = await remnawaveGetUser(sub.remnawaveUuid);
+          if (info?.subscriptionUrl) {
+            refreshedUrl = info.subscriptionUrl;
+            await prisma.subscription.update({
+              where: { id },
+              data: {
+                subscriptionUrl: refreshedUrl,
+                subscriptionUrl2: null, // больше не выдаём вторую ссылку
+              },
+            });
+          }
+        } catch (e) {
+          console.warn("[Extend] Failed to refresh sub url from Remnawave:", e?.message || e);
+        }
+      }
+
       const newBalance = user.balance - price;
 
       await editOrAnswer(
@@ -814,6 +838,7 @@ return tx.subscription.update({
         `✅ Подписка продлена на ${plan.label}
   Новая дата окончания: ${formatDate(updated.endDate)}
 
+  ${refreshedUrl ? `\n🔗 Ваша ссылка: ${refreshedUrl}\n` : ""}
   Текущий баланс: ${ruMoney(newBalance)}`,
         mainMenu(newBalance)
       );
