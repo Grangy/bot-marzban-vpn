@@ -77,18 +77,30 @@ function pickSubscriptionUrlFromRemnawaveBody(body) {
 
 /** Fallback: GET по username (на части деплоев lookup может не работать) */
 async function remnawaveResolveUuidByUsername(username) {
-  const r = await fetch(`${REMNAWAVE_API_URL}/v1/users/${encodeURIComponent(username)}`, {
-    headers: { "x-api-key": REMNAWAVE_API_KEY },
-  });
-  const text = await r.text();
-  let json;
-  try {
-    json = text ? JSON.parse(text) : {};
-  } catch {
+  const u = String(username || "").trim();
+  if (!u) return null;
+  const url = `${REMNAWAVE_API_URL}/v1/users/${encodeURIComponent(u)}`;
+  let lastText = "";
+  const maxAttempts = 12;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const r = await fetch(url, { headers: { "x-api-key": REMNAWAVE_API_KEY } });
+    lastText = await r.text();
+    let json;
+    try {
+      json = lastText ? JSON.parse(lastText) : {};
+    } catch {
+      json = {};
+    }
+    if (r.ok && json.user) return pickUuidFromRemnawaveBody(json);
+
+    const maybeSyncDelay = r.status === 404 && lastText.includes("Not found") && attempt < maxAttempts;
+    if (maybeSyncDelay) {
+      await new Promise((res) => setTimeout(res, 2000));
+      continue;
+    }
     return null;
   }
-  if (!r.ok || !json.user) return null;
-  return pickUuidFromRemnawaveBody(json);
+  return null;
 }
 
 function findUrlWithSubPath(obj, depth) {

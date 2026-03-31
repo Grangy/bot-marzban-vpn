@@ -111,77 +111,78 @@ bot.start(async (ctx) => {
 
   const raw = (ctx.message?.text || "").trim();
 
-  // /start hp_claim_<token>
+  // /start hp_claim_<username>  (новый flow: token == username Remnawave)
+  // fallback: если по username не нашли — пробуем legacy redeem на сайте
   const claimMatch = raw.match(/^\/start(?:@\w+)?\s+(hp_claim_[A-Za-z0-9._~-]+)$/i);
   if (claimMatch) {
     const arg = claimMatch[1];
-    const token = arg.startsWith("hp_claim_") ? arg.slice("hp_claim_".length) : "";
-    if (!token) {
-      await ctx.reply("❌ Некорректный токен. Попробуйте заново из сайта.");
+    const claimArg = arg.startsWith("hp_claim_") ? arg.slice("hp_claim_".length) : "";
+    if (!claimArg) {
+      await ctx.reply("❌ Некорректный параметр. Откройте ссылку из сайта заново.");
       return;
     }
 
     try {
-      await ctx.reply("⏳ Подтверждаю токен и привязываю подписку...");
+      await ctx.reply("⏳ Привязываю подписку к Telegram...");
 
       const telegramId = Number(ctx.from?.id);
       const username = ctx.from?.username || null;
 
-      const redeemed = await redeemClaim({ token, telegramId, username });
-      if (!redeemed.ok) {
-        if (redeemed.status === 409) {
-          await ctx.reply("✅ Бонус уже получали ранее.", mainMenu(user.balance));
-          return;
-        }
-        if (redeemed.status === 410) {
-          await ctx.reply("⏳ Токен истёк. Вернитесь на сайт и получите новый.", mainMenu(user.balance));
-          return;
-        }
-        if (redeemed.status === 404) {
-          await ctx.reply("❌ Токен неверный. Проверьте ссылку и попробуйте снова.", mainMenu(user.balance));
-          return;
-        }
-        if (redeemed.status === 401) {
-          await ctx.reply("❌ Ошибка конфигурации (ключ сайта не совпадает). Сообщите администратору.", mainMenu(user.balance));
-          return;
-        }
-        throw new Error(`redeem failed: ${redeemed.status} ${String(redeemed.text || '').slice(0, 200)}`);
-      }
+      // Variant A: claimArg == Remnawave username (например: trial_dd3f4f2251f2)
+      const resolvedUuid = await remnawaveResolveUuidByUsername(claimArg);
+      let remnawaveUuid = resolvedUuid;
+      let usedName = claimArg;
+      let bonusGb = 1;
 
-      const body = redeemed.data || {};
-      const subscriptionUuid = body.subscriptionUuid;
-      const trialUsername = body.trialUsername;
-      const bonusGb = body.bonusGb ?? 1;
-      console.log("[CLAIM] redeem ok:", {
-        subscriptionUuidPreview: typeof subscriptionUuid === "string" ? subscriptionUuid.slice(0, 32) : null,
-        trialUsername: trialUsername || null,
-        bonusGb,
-      });
+      // Fallback: legacy redeem (Variant B) — если username не найден
+      if (!remnawaveUuid) {
+        const redeemed = await redeemClaim({ token: claimArg, telegramId, username });
+        if (!redeemed.ok) {
+          if (redeemed.status === 409) {
+            await ctx.reply("✅ Бонус уже получали ранее.", mainMenu(user.balance));
+            return;
+          }
+          if (redeemed.status === 410) {
+            await ctx.reply("⏳ Токен истёк. Вернитесь на сайт и получите новый.", mainMenu(user.balance));
+            return;
+          }
+          if (redeemed.status === 404) {
+            await ctx.reply("❌ Не найдено. Проверьте ссылку и попробуйте снова.", mainMenu(user.balance));
+            return;
+          }
+          if (redeemed.status === 401) {
+            await ctx.reply("❌ Ошибка конфигурации (ключ сайта не совпадает). Сообщите администратору.", mainMenu(user.balance));
+            return;
+          }
+          throw new Error(`redeem failed: ${redeemed.status} ${String(redeemed.text || "").slice(0, 200)}`);
+        }
 
-      if (!subscriptionUuid) throw new Error("redeem ok but missing subscriptionUuid");
+        const body = redeemed.data || {};
+        const subscriptionUuid = body.subscriptionUuid;
+        const trialUsername = body.trialUsername;
+        bonusGb = body.bonusGb ?? 1;
+        console.log("[CLAIM] redeem ok:", {
+          subscriptionUuidPreview: typeof subscriptionUuid === "string" ? subscriptionUuid.slice(0, 32) : null,
+          trialUsername: trialUsername || null,
+          bonusGb,
+        });
 
-      let remnawaveUuid = subscriptionUuid;
-      try {
-        await setRemnawaveTelegram(remnawaveUuid, telegramId, username);
-      } catch (e) {
-        const msg = String(e?.message || e || "");
-        const notFound = msg.includes("REMNAWAVE_TELEGRAM_FAILED 404");
-        if (!notFound) throw e;
         const candidates = [trialUsername, subscriptionUuid].filter((s) => typeof s === "string" && s.trim());
-        let resolved = null;
         for (const c of candidates) {
-          resolved = await remnawaveResolveUuidByUsername(c);
-          if (resolved) break;
+          remnawaveUuid = await remnawaveResolveUuidByUsername(c);
+          if (remnawaveUuid) {
+            usedName = c;
+            break;
+          }
         }
-        if (!resolved) throw e;
-        remnawaveUuid = resolved;
-        await setRemnawaveTelegram(remnawaveUuid, telegramId, username);
       }
 
-      // начисление трафика (endpoint должен быть в remnawave-api)
+      if (!remnawaveUuid) throw new Error("Cannot resolve Remnawave uuid for claim");
+
+      await setRemnawaveTelegram(remnawaveUuid, telegramId, username);
       await addRemnawaveTrafficGb(remnawaveUuid, bonusGb);
 
-      const nameLine = trialUsername ? `\n👤 Подписка: ${trialUsername}` : "";
+      const nameLine = usedName ? `\n👤 Подписка: ${usedName}` : "";
       await ctx.reply(
         `✅ Подписка привязана к Telegram и бонус начислен.\n🎁 +${bonusGb} GB${nameLine}\n\nОткройте «Мои подписки» и нажмите «Подключить».`,
         mainMenu(user.balance)
@@ -192,7 +193,7 @@ bot.start(async (ctx) => {
       const msg = String(e?.message || e || "");
       const extra =
         msg.includes("REMNAWAVE_TELEGRAM_FAILED 404") || msg.includes("REMNAWAVE_TRAFFIC_FAILED 404")
-          ? "\n\nПохоже, Remnawave ещё не видит созданную подписку. Откройте ссылку подписки с сайта (sub.maxg.ch/...) и повторите запуск из Telegram. Если повторяется — сайту нужно отдавать remnawaveUuid (или username) в ответе redeem."
+          ? "\n\nПохоже, Remnawave ещё не видит созданную подписку. Подождите 10–20 секунд и нажмите ссылку ещё раз."
           : "";
       await ctx.reply(`❌ Не удалось активировать токен.\n${msg}${extra}`, mainMenu(user.balance));
       return;
