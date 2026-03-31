@@ -7,6 +7,7 @@ const { startTopupCleaner } = require("./topupCleaner");
 const { startSubExpiryNotifier } = require("./subExpiryNotifier");
 const { startBackupScheduler } = require("./backup");
 const { startNoTrafficReminder } = require("./no-traffic-reminder");
+const { startExtendReminder12h } = require("./extend-reminder-12h");
 const { initAdminNotifier } = require("./admin-notifier");
 const { initBroadcast } = require("./broadcast");
 
@@ -21,6 +22,7 @@ const PORT = process.env.PAYMENT_PORT || 4000;
     startSubExpiryNotifier(bot);   // запускаем сканер подписок
     startBackupScheduler(); // 👈 запускаем планировщик бэкапов
     startNoTrafficReminder(bot);   // 👈 через 2ч после покупки, если нет трафика — напоминание
+    startExtendReminder12h(bot);   // 👈 через 12ч после привязки FREE/trial — напоминание о продлении
     // Сервер поднимаем сразу
     console.log("🌐 Starting payment server...");
     const app = createServer();

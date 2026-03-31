@@ -68,6 +68,7 @@ model Subscription {
   subscriptionUrl String?          // 🔥 основная ссылка (vpn.grangy.ru)
   subscriptionUrl2 String?         // 🔥 вторая ссылка для rus2 (rus2.grangy.ru:8888)
   remnawaveUuid   String?          @unique // UUID в Remnawave Panel (уникален: 1 подписка → 1 пользователь)
+  remindExtend12hSentAt DateTime?         // напоминание через 12 часов после привязки (trial/FREE)
   notified3Days            Boolean   @default(false)  // уведомление за 3 дня отправлено
   notified1Day             Boolean   @default(false)  // уведомление за 1 день отправлено
   lastExpiredReminderAt    DateTime?   
