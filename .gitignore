@@ -44,6 +44,10 @@ scripts/new-api/*.crt
 scripts/new-api/*.cer
 scripts/new-api/*.der
 scripts/new-api/*.jks
+
+# Локальные файлы с реальными ключами (НИКОГДА не коммитить)
+scripts/new-api/PROD_BOT_REMNAWAVE_KEYS.md
+scripts/new-api/*keys*.md
 # Документация (можно добавить обратно, если нужна в Git)
 # PROMO_API_DOCUMENTATION.md
 # PROMO_SYSTEM_UPDATE.md
