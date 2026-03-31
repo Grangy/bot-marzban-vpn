@@ -351,9 +351,53 @@ async function extendMarzbanUserOnBothServers(username, days, opts = {}) {
   return results;
 }
 
+/**
+ * Привязать Telegram к Remnawave пользователю
+ * PATCH /v1/users/:uuid/telegram
+ */
+async function setRemnawaveTelegram(remnawaveUuid, telegramId, username) {
+  const uuid = String(remnawaveUuid || "").trim();
+  if (!uuid) throw new Error("remnawaveUuid is required");
+  if (!useRemnawavePrimary()) throw new Error("Remnawave not configured");
+
+  const url = `${REMNAWAVE_API_URL}/v1/users/${encodeURIComponent(uuid)}/telegram`;
+  const body = JSON.stringify({
+    telegramId: Number(telegramId),
+    username: username || null,
+  });
+
+  const res = await fetch(url, { method: "PATCH", headers: remnawaveHeaders(), body });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`REMNAWAVE_TELEGRAM_FAILED ${res.status}: ${text.slice(0, 300)}`);
+  return text;
+}
+
+/**
+ * Начислить бонусный трафик.
+ * ВАЖНО: endpoint должен существовать в remnawave-api. Если у вас другое имя/путь — скажи, заменю.
+ * PATCH /v1/users/:uuid/traffic-bonus  { gb: number }
+ */
+async function addRemnawaveTrafficGb(remnawaveUuid, gb) {
+  const uuid = String(remnawaveUuid || "").trim();
+  if (!uuid) throw new Error("remnawaveUuid is required");
+  if (!useRemnawavePrimary()) throw new Error("Remnawave not configured");
+  const n = Number(gb);
+  if (!Number.isFinite(n) || n <= 0) throw new Error("gb must be > 0");
+
+  const url = `${REMNAWAVE_API_URL}/v1/users/${encodeURIComponent(uuid)}/traffic-bonus`;
+  const body = JSON.stringify({ gb: n });
+
+  const res = await fetch(url, { method: "PATCH", headers: remnawaveHeaders(), body });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`REMNAWAVE_TRAFFIC_FAILED ${res.status}: ${text.slice(0, 300)}`);
+  return text;
+}
+
 module.exports = {
   createMarzbanUserOnBothServers,
   createUserOnMarzbanServer,
   convertToRus2Url,
   extendMarzbanUserOnBothServers,
+  setRemnawaveTelegram,
+  addRemnawaveTrafficGb,
 };

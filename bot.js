@@ -4,6 +4,8 @@ const { SubscriptionType } = require("@prisma/client");
 const { mainMenu, planSelectedMenu, PLANS, ruMoney, getPlanPrice, getDiscountBanner, isDiscountActive } = require("./menus");
 const { registerActions } = require("./actions");
 const { registerPromo } = require("./promo");
+const { redeemClaim } = require("./hp-claim");
+const { setRemnawaveTelegram, addRemnawaveTrafficGb } = require("./marzban-utils");
 const crypto = require("crypto");
 
 
@@ -22,6 +24,10 @@ bot.use((ctx, next) => {
     const text = msg?.text || msg?.caption || ctx.callbackQuery?.data || "";
     const from = ctx.from?.id || ctx.channelPost?.sender_chat?.id || ctx.callbackQuery?.from?.id || "?";
     console.log(`[BOT] ← update=${updateType} chatId=${chatId} from=${from} text=${String(text).slice(0, 80) || "[пусто]"}`);
+    if (updateType === "message" && !text && msg) {
+      const keys = Object.keys(msg).filter((k) => k !== "from" && k !== "chat");
+      console.log(`[BOT] message без text: keys=${keys.join(",")}`);
+    }
   }
   return next();
 });
@@ -100,6 +106,49 @@ bot.start(async (ctx) => {
   }
 
   const raw = (ctx.message?.text || "").trim();
+
+  // /start hp_claim_<token>
+  const claimMatch = raw.match(/^\/start(?:@\w+)?\s+(hp_claim_[A-Za-z0-9._~-]+)$/i);
+  if (claimMatch) {
+    const arg = claimMatch[1];
+    const token = arg.startsWith("hp_claim_") ? arg.slice("hp_claim_".length) : "";
+    if (!token) {
+      await ctx.reply("❌ Некорректный токен. Попробуйте заново из сайта.");
+      return;
+    }
+
+    try {
+      await ctx.reply("⏳ Подтверждаю токен и привязываю подписку...");
+
+      const telegramId = Number(ctx.from?.id);
+      const username = ctx.from?.username || null;
+
+      const redeemed = await redeemClaim({ token, telegramId, username });
+      const subscriptionUuid = redeemed.subscriptionUuid;
+      const trialUsername = redeemed.trialUsername;
+      const bonusGb = redeemed.bonusGb ?? 1;
+
+      if (!subscriptionUuid) {
+        throw new Error("redeem response missing subscriptionUuid");
+      }
+
+      await setRemnawaveTelegram(subscriptionUuid, telegramId, username);
+      // начисление трафика (endpoint должен быть в remnawave-api)
+      await addRemnawaveTrafficGb(subscriptionUuid, bonusGb);
+
+      const nameLine = trialUsername ? `\n👤 Подписка: ${trialUsername}` : "";
+      await ctx.reply(
+        `✅ Подписка привязана к Telegram и бонус начислен.\n🎁 +${bonusGb} GB${nameLine}\n\nОткройте «Мои подписки» и нажмите «Подключить».`,
+        mainMenu(user.balance)
+      );
+      return;
+    } catch (e) {
+      console.error("[CLAIM] /start hp_claim error:", e);
+      await ctx.reply(`❌ Не удалось активировать токен.\n${e.message || e}`, mainMenu(user.balance));
+      return;
+    }
+  }
+
   const planMatch = raw.match(/^\/start(?:@\w+)?\s+plan_(D7|M1|M3|M6|M12)$/i);
 
   if (planMatch) {
