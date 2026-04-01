@@ -242,11 +242,15 @@ async function remnawaveGetUser(idOrUsername) {
     }
     if (r.ok && json.user) {
       const inner = remnawaveUserPayload(json.user);
+      const tlbRaw = inner?.trafficLimitBytes;
+      const trafficLimitBytes =
+        typeof tlbRaw === "number" ? tlbRaw : typeof tlbRaw === "string" ? Number(tlbRaw) : null;
       return {
         uuid: pickUuidFromRemnawaveBody(json),
         username: typeof inner?.username === "string" ? inner.username : null,
         subscriptionUrl: pickSubscriptionUrlFromRemnawaveBody(json),
         expireAt: inner?.expireAt || inner?.expire_at || null,
+        trafficLimitBytes: Number.isFinite(trafficLimitBytes) ? trafficLimitBytes : null,
         raw: json,
       };
     }

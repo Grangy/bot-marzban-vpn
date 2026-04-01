@@ -867,7 +867,7 @@ return tx.subscription.update({
       if (sub.remnawaveUuid) {
         try {
           const current = await remnawaveGetUser(sub.remnawaveUuid);
-          const tlb = Number(current?.raw?.user?.response?.trafficLimitBytes ?? current?.raw?.user?.trafficLimitBytes);
+          const tlb = Number(current?.trafficLimitBytes);
           if (Number.isFinite(tlb) && tlb > 0) {
             const msLeft = newEndDate.getTime() - Date.now();
             const daysLeft = Math.max(1, Math.ceil(msLeft / 86400000));
