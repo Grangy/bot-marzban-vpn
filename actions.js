@@ -811,6 +811,7 @@ return tx.subscription.update({
   where: { id },
   data: {
     endDate: newEndDate,
+    type: SubscriptionType[plan.type] ?? plan.type,
     // 👇 сброс напоминаний
     notified3Days: false,
     notified1Day: false,
