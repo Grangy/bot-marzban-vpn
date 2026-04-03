@@ -78,6 +78,29 @@ const PLANS = {
 };
 const TOPUP_AMOUNTS = [99, 199, 499, 799, 1499];
 
+/** Подсказка срока для кнопок пополнения (тот же порядок, что у TOPUP_AMOUNTS) */
+const TOPUP_DURATION_HINT = ["1 неделя", "1 мес.", "3 мес.", "6 мес.", "12 мес."];
+
+/** Краткая подпись срока для кнопок «Купить» / deep link (например «1 неделя», «3 мес.») */
+function getPlanDurationHint(planKey) {
+  const p = PLANS[planKey];
+  if (!p) return "";
+  if (planKey === "D7") return "1 неделя";
+  if (p.months) return `${p.months} мес.`;
+  return "";
+}
+
+/** Подсказка для нестандартной суммы пополнения (совпадение с тарифом со скидкой и т.п.) */
+function hintForTopupRubles(amount, amountsList) {
+  const i = amountsList.indexOf(amount);
+  if (i >= 0 && TOPUP_DURATION_HINT[i]) return TOPUP_DURATION_HINT[i];
+  const planKeys = ["D7", "M1", "M3", "M6", "M12"];
+  for (let j = 0; j < planKeys.length; j++) {
+    if (getPlanPrice(planKeys[j]) === amount) return TOPUP_DURATION_HINT[j];
+  }
+  return null;
+}
+
 function ruMoney(v) {
   return `${v} ₽`;
 }
@@ -167,11 +190,11 @@ function buyMenu() {
   const p6 = getPlanPrice("M6");
   const p12 = getPlanPrice("M12");
   return Markup.inlineKeyboard([
-    [cb(`${PLANS.D7.label} — ${ruMoney(p7d)}`, "buy_D7", "primary")],
-    [cb(`${PLANS.M1.label} — ${ruMoney(p1)}`, "buy_M1", "primary")],
-    [cb(`${PLANS.M3.label} — ${ruMoney(p3)}`, "buy_M3", "primary")],
-    [cb(`${PLANS.M6.label} — ${ruMoney(p6)}`, "buy_M6", "primary")],
-    [cb(`${PLANS.M12.label} — ${ruMoney(p12)}`, "buy_M12", "primary")],
+    [cb(`${PLANS.D7.label} — ${ruMoney(p7d)} (${getPlanDurationHint("D7")})`, "buy_D7", "primary")],
+    [cb(`${PLANS.M1.label} — ${ruMoney(p1)} (${getPlanDurationHint("M1")})`, "buy_M1", "primary")],
+    [cb(`${PLANS.M3.label} — ${ruMoney(p3)} (${getPlanDurationHint("M3")})`, "buy_M3", "primary")],
+    [cb(`${PLANS.M6.label} — ${ruMoney(p6)} (${getPlanDurationHint("M6")})`, "buy_M6", "primary")],
+    [cb(`${PLANS.M12.label} — ${ruMoney(p12)} (${getPlanDurationHint("M12")})`, "buy_M12", "primary")],
     [cb("⬅️ Назад", "back")],
   ]);
 }
@@ -182,7 +205,7 @@ function planSelectedMenu(planKey) {
   if (!plan) return mainMenu(0);
   const price = getPlanPrice(planKey);
   return Markup.inlineKeyboard([
-    [cb(`🛒 Приобрести — ${ruMoney(price)}`, `buy_${planKey}`, "primary")],
+    [cb(`🛒 Приобрести — ${ruMoney(price)} (${getPlanDurationHint(planKey)})`, `buy_${planKey}`, "primary")],
     [cb("📋 Другие тарифы", "buy")],
     [cb("⬅️ В меню", "back")],
   ]);
@@ -203,11 +226,17 @@ function topupMenu(requiredAmount = null) {
 
   // Если указана нужная сумма и её нет в стандартных - добавляем кнопку с нужной суммой
   if (requiredAmount && requiredAmount > 0 && !amounts.includes(requiredAmount)) {
-    buttons.push([cb(`💰 Пополнить на ${ruMoney(requiredAmount)}`, `topup_${requiredAmount}`, "primary")]);
+    const extraHint = hintForTopupRubles(requiredAmount, amounts);
+    const extraLabel = extraHint
+      ? `💰 Пополнить на ${ruMoney(requiredAmount)} (${extraHint})`
+      : `💰 Пополнить на ${ruMoney(requiredAmount)}`;
+    buttons.push([cb(extraLabel, `topup_${requiredAmount}`, "primary")]);
   }
 
-  amounts.forEach((amount) => {
-    buttons.push([cb(`+ ${ruMoney(amount)}`, `topup_${amount}`, "primary")]);
+  amounts.forEach((amount, idx) => {
+    const hint = TOPUP_DURATION_HINT[idx];
+    const label = hint ? `+ ${ruMoney(amount)} (${hint})` : `+ ${ruMoney(amount)}`;
+    buttons.push([cb(label, `topup_${amount}`, "primary")]);
   });
 
   buttons.push([cb("⬅️ Назад", "back")]);
@@ -231,6 +260,7 @@ module.exports = {
   getDiscountBanner,
   getPlanPrice,
   getTopupAmounts,
+  getPlanDurationHint,
   ruMoney,
   formatDate,
   calcEndDate,
