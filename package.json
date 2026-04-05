@@ -7,7 +7,7 @@
     "analyze-no-traffic": "node analyze-no-traffic.js",
     "analyze-no-traffic:send": "node analyze-no-traffic.js --send",
     "studio": "prisma studio",
-    "studio:prod-db": "env DATABASE_URL=file:./dev.db.prod prisma studio",
+    "studio:prod-db": "node scripts/prisma-studio-prod-db.js",
     "studio:fix": "rm -rf node_modules/.prisma node_modules/.cache 2>/dev/null; npx prisma generate && prisma studio"
   },
   "keywords": [],
