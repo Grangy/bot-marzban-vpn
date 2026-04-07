@@ -56,6 +56,7 @@ let botInstance = null;
 
 /** Состояние "ожидание ввода" для админ-меню: chatId -> { action, fromId? } */
 const admState = new Map();
+const oneTimeAdminRequests = new Set();
 
 function getAdmMainMenu() {
   return Markup.inlineKeyboard([
@@ -711,6 +712,32 @@ function initAdminNotifier(bot) {
     } catch (e) {
       console.error("[ADMIN] adm_cancel:", e);
       await ctx.answerCbQuery("❌ Ошибка").catch(() => {});
+    }
+  });
+
+  // Одноразовый запрос в админ-группе: принять/отклонить.
+  // Формат callback_data: sasha_req_(accept|decline)_<id>
+  bot.action(/^sasha_req_(accept|decline)_(.+)$/, async (ctx) => {
+    if (!isAdminGroup(ctx.chat?.id)) return;
+    const decision = ctx.match?.[1];
+    const reqId = String(ctx.match?.[2] || "");
+    const key = `sasha_req_${reqId}`;
+
+    if (oneTimeAdminRequests.has(key)) {
+      await ctx.answerCbQuery("Уже обработано");
+      return;
+    }
+    oneTimeAdminRequests.add(key);
+
+    try {
+      await ctx.answerCbQuery(decision === "accept" ? "Принято" : "Отклонено");
+      const text = decision === "accept"
+        ? "✅ Принято. Отправляем: 🤡"
+        : "❌ Отклонено.";
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
+      await ctx.reply(text);
+    } catch (e) {
+      console.error("[ADMIN] sasha one-time request handler:", e);
     }
   });
 
