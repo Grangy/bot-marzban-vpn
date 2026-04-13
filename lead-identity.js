@@ -63,9 +63,30 @@ async function getOrCreateUserForLead(prismaClient, leadTypeRaw, leadCodeRaw) {
   throw new Error("LEAD_CREATE_RETRY_EXHAUSTED");
 }
 
+/**
+ * Только поиск существующего лида (без создания). Невалидные lead_* → null.
+ * @returns {Promise<import("@prisma/client").User | null>}
+ */
+async function findUserByLead(prismaClient, leadTypeRaw, leadCodeRaw) {
+  let leadType;
+  let leadCode;
+  try {
+    leadType = normalizeLeadType(leadTypeRaw);
+    leadCode = normalizeLeadCode(leadCodeRaw);
+  } catch {
+    return null;
+  }
+  const row = await prismaClient.leadIdentity.findUnique({
+    where: { leadType_leadCode: { leadType, leadCode } },
+    include: { user: true },
+  });
+  return row?.user ?? null;
+}
+
 module.exports = {
   normalizeLeadType,
   normalizeLeadCode,
   getOrCreateUserForLead,
+  findUserByLead,
   LEAD_TELEGRAM_PREFIX,
 };

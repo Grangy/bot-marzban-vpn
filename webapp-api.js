@@ -13,7 +13,7 @@ const {
   hasActiveYearRenewalDiscount,
 } = require("./menus");
 const { withMergedYearRenewalDiscount } = require("./pricing-user");
-const { getOrCreateUserForLead } = require("./lead-identity");
+const { getOrCreateUserForLead, findUserByLead } = require("./lead-identity");
 
 // Секретный ключ для API (должен быть в .env)
 const WEBAPP_SECRET = process.env.WEBAPP_SECRET || "maxgroot_webapp_secret_key_2026";
@@ -949,6 +949,9 @@ function registerWebAppAPI(app) {
           amount: amountNum,
           paymentUrl: result.link,
           isFallback: result.isFallback || false,
+          userId: user.id,
+          /** Передайте в POST /api/subscription/buy как telegramId после успешной оплаты (в т.ч. для лидов `lead:...`). */
+          billingTelegramId: user.telegramId,
           ...(leadInfo ? { lead: leadInfo } : {}),
         }
       });
@@ -1080,17 +1083,26 @@ function registerWebAppAPI(app) {
 
   /**
    * POST /api/subscription/buy
-   * Купить подписку (списать с баланса)
+   * Купить подписку (списать с баланса).
+   * Тело: { telegramId, planId } или { lead_type, lead_code, planId } — лид должен уже существовать (после topup/create).
+   * Если переданы и telegramId, и lead_* — используется telegramId.
    */
   app.post("/api/subscription/buy", async (req, res) => {
     try {
-      const { telegramId, planId } = req.body;
+      const { telegramId, planId, lead_type, lead_code } = req.body || {};
 
-      if (!telegramId || !planId) {
+      const hasTg = telegramId != null && String(telegramId).trim() !== "";
+      const hasLead =
+        lead_type != null &&
+        String(lead_type).trim() !== "" &&
+        lead_code != null &&
+        String(lead_code).trim() !== "";
+
+      if ((!hasTg && !hasLead) || !planId) {
         return res.status(400).json({ 
           ok: false, 
           error: "INVALID_PARAMS",
-          message: "telegramId и planId обязательны" 
+          message: "Нужны planId и либо telegramId, либо пара lead_type + lead_code" 
         });
       }
 
@@ -1103,7 +1115,22 @@ function registerWebAppAPI(app) {
         });
       }
 
-      const mainUser = await getMainUser(telegramId);
+      let mainUser;
+      if (hasTg) {
+        mainUser = await getMainUser(telegramId);
+      } else {
+        const leadUser = await findUserByLead(prisma, lead_type, lead_code);
+        if (!leadUser) {
+          return res.status(404).json({
+            ok: false,
+            error: "LEAD_NOT_FOUND",
+            message:
+              "Лид не найден. Сначала вызовите POST /api/topup/create с теми же lead_type и lead_code (или проверьте код).",
+          });
+        }
+        mainUser = await withMergedYearRenewalDiscount(prisma, leadUser);
+      }
+
       if (!mainUser) {
         return res.status(404).json({ 
           ok: false, 
@@ -1167,8 +1194,9 @@ function registerWebAppAPI(app) {
         return subscription;
       });
 
-      // Создаем пользователя в Marzban
-      const username = `${telegramId}_${planId}_${result.id}`;
+      // Создаем пользователя в Marzban / Remnawave
+      const tgKey = String(mainUser.telegramId);
+      const username = `${tgKey}_${planId}_${result.id}`;
       const expireSeconds = plan.days
         ? plan.days * 24 * 60 * 60
         : plan.months * 30 * 24 * 60 * 60;
@@ -1185,7 +1213,7 @@ function registerWebAppAPI(app) {
           }
         },
         inbounds: { vless: ["VLESS TCP REALITY", "VLESS-TCP-REALITY-VISION"] },
-        note: `Telegram user ${user.accountName || telegramId}`,
+        note: `Telegram user ${user.accountName || tgKey}`,
         data_limit: 0,
         data_limit_reset_strategy: "no_reset"
       };
