@@ -349,7 +349,7 @@ bot.action(/^guide_video_(ios|android|android_tv|windows|macos)$/, async (ctx) =
         return editOrAnswer(
           ctx,
           `💳 Для покупки подписки нужно пополнить баланс.\n\nТекущий баланс: ${ruMoney(user?.balance || 0)}\nМинимальная подписка: ${ruMoney(minPaidPrice)}${discountLine}\nВыберите сумму пополнения:`,
-          topupMenu()
+          topupMenu(null, user)
         );
       }
 
@@ -383,9 +383,10 @@ bot.action("privacy", async (ctx) => {
 
 bot.action("balance_topup", async (ctx) => {
   await safeAnswerCbQuery(ctx);
+  const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
   const banner = getDiscountBanner();
   const text = banner ? `Выберите сумму пополнения:\n\n${banner}` : "Выберите сумму пополнения:";
-  await editOrAnswer(ctx, text, topupMenu());
+  await editOrAnswer(ctx, text, topupMenu(null, user));
 });
 
 bot.action("balance_refresh", async (ctx) => {
@@ -395,7 +396,7 @@ bot.action("balance_refresh", async (ctx) => {
 `💼 Баланс: ${ruMoney(user.balance)}
 
 Ваш промокод: \`${user.promoCode}\``;
-  await editOrAnswer(ctx, text, balanceMenu(user.balance));
+  await editOrAnswer(ctx, text, balanceMenu(user.balance, user));
 });
 
   // внутри registerActions(bot)
@@ -446,7 +447,7 @@ bot.action("balance_refresh", async (ctx) => {
         await editOrAnswer(
           ctx,
           `💳 Для покупки подписки нужно пополнить баланс.\n\nТекущий баланс: ${ruMoney(currentBalance)}\nСтоимость подписки: ${ruMoney(price)}\nНеобходимо пополнить: ${ruMoney(requiredAmount)}${discountLine2}\nВыберите сумму пополнения:`,
-          topupMenu(requiredAmount)
+          topupMenu(requiredAmount, user)
         );
         return;
       }
@@ -525,7 +526,7 @@ bot.action("balance", async (ctx) => {
 Ваш промокод: \`${user.promoCode}\`
 (Активировать чужой код: /promo КОД)`;
 
-  await editOrAnswer(ctx, text, balanceMenu(user.balance));
+  await editOrAnswer(ctx, text, balanceMenu(user.balance, user));
 });
 
 
@@ -556,7 +557,8 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
 
   if (isNaN(amount) || amount <= 0) {
     console.warn(`[TOPUP] Invalid amount: "${ctx.match[1]}"`);
-    return ctx.reply("Некорректная сумма пополнения.", topupMenu());
+    const u = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+    return ctx.reply("Некорректная сумма пополнения.", topupMenu(null, u));
   }
 
   console.log(`[TOPUP] User ${ctx.dbUser.id} requested topup for ${amount} ₽`);
@@ -594,7 +596,8 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
       errorMessage = "Ошибка конфигурации платежной системы. Обратитесь в поддержку.";
     }
     
-    await ctx.reply(`${errorMessage}\n\nЕсли проблема повторяется, обратитесь в поддержку: @supmaxgroot`, topupMenu());
+    const u = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+    await ctx.reply(`${errorMessage}\n\nЕсли проблема повторяется, обратитесь в поддержку: @supmaxgroot`, topupMenu(null, u));
   }
 });
 
@@ -795,7 +798,7 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
       await editOrAnswer(
         ctx,
         `💳 Для продления подписки нужно пополнить баланс.\n\nТекущий баланс: ${ruMoney(user.balance)}\nСтоимость продления: ${ruMoney(price)}\nНеобходимо пополнить: ${ruMoney(requiredAmount)}${discountLineExt}\nВыберите сумму пополнения:`,
-        topupMenu(requiredAmount)
+        topupMenu(requiredAmount, user)
       );
       return;
     }

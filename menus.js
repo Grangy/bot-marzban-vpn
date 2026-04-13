@@ -108,13 +108,23 @@ function getPlanDurationHint(planKey) {
   return "";
 }
 
+/** Сумма пополнения «год со скидкой −20%» (только при активной персональной акции). */
+function getPersonalYearTopupRubles(pricingUser) {
+  if (!hasActiveYearRenewalDiscount(pricingUser)) return null;
+  return getPlanPrice("M12", pricingUser);
+}
+
 /** Подсказка для нестандартной суммы пополнения (совпадение с тарифом со скидкой и т.п.) */
-function hintForTopupRubles(amount, amountsList) {
+function hintForTopupRubles(amount, amountsList, pricingUser = null) {
+  if (pricingUser && hasActiveYearRenewalDiscount(pricingUser)) {
+    const y = getPlanPrice("M12", pricingUser);
+    if (amount === y) return "12 мес. −20%";
+  }
   const i = amountsList.indexOf(amount);
   if (i >= 0 && TOPUP_DURATION_HINT[i]) return TOPUP_DURATION_HINT[i];
   const planKeys = ["D7", "M1", "M3", "M6", "M12"];
   for (let j = 0; j < planKeys.length; j++) {
-    if (getPlanPrice(planKeys[j]) === amount) return TOPUP_DURATION_HINT[j];
+    if (getPlanPrice(planKeys[j], pricingUser) === amount) return TOPUP_DURATION_HINT[j];
   }
   return null;
 }
@@ -207,14 +217,19 @@ function buyMenu(pricingUser = null) {
   const p3 = getPlanPrice("M3", pricingUser);
   const p6 = getPlanPrice("M6", pricingUser);
   const p12 = getPlanPrice("M12", pricingUser);
-  return Markup.inlineKeyboard([
+  const rows = [
     [cb(`${PLANS.D7.label} — ${ruMoney(p7d)} (${getPlanDurationHint("D7")})`, "buy_D7", "primary")],
     [cb(`${PLANS.M1.label} — ${ruMoney(p1)} (${getPlanDurationHint("M1")})`, "buy_M1", "primary")],
     [cb(`${PLANS.M3.label} — ${ruMoney(p3)} (${getPlanDurationHint("M3")})`, "buy_M3", "primary")],
     [cb(`${PLANS.M6.label} — ${ruMoney(p6)} (${getPlanDurationHint("M6")})`, "buy_M6", "primary")],
     [cb(`${PLANS.M12.label} — ${ruMoney(p12)} (${getPlanDurationHint("M12")})`, "buy_M12", "primary")],
-    [cb("⬅️ Назад", "back")],
-  ]);
+  ];
+  const yearTop = getPersonalYearTopupRubles(pricingUser);
+  if (yearTop) {
+    rows.push([cb(`+ ${ruMoney(yearTop)} на баланс (год −20%)`, `topup_${yearTop}`, "success")]);
+  }
+  rows.push([cb("⬅️ Назад", "back")]);
+  return Markup.inlineKeyboard(rows);
 }
 
 /** Клавиатура для deep link ?start=plan_M1: выбран план — «Приобрести» и «В меню» */
@@ -229,29 +244,38 @@ function planSelectedMenu(planKey, pricingUser = null) {
   ]);
 }
 
-function balanceMenu(balanceRub = 0) {
-  return Markup.inlineKeyboard([
-    [cb(`💼 Баланс: ${ruMoney(balanceRub)}`, "balance_refresh")],
-    [cb("➕ Пополнить", "balance_topup", "primary"), cb("🎁 Промокод", "promo")],
-    [cb("⬅️ Назад", "back")],
-  ]);
+function balanceMenu(balanceRub = 0, pricingUser = null) {
+  const rows = [[cb(`💼 Баланс: ${ruMoney(balanceRub)}`, "balance_refresh")]];
+  const yearTop = getPersonalYearTopupRubles(pricingUser);
+  if (yearTop) {
+    rows.push([cb(`+ ${ruMoney(yearTop)} (год −20%)`, `topup_${yearTop}`, "success")]);
+  }
+  rows.push([cb("➕ Пополнить", "balance_topup", "primary"), cb("🎁 Промокод", "promo")]);
+  rows.push([cb("⬅️ Назад", "back")]);
+  return Markup.inlineKeyboard(rows);
 }
 
 
-function topupMenu(requiredAmount = null) {
+function topupMenu(requiredAmount = null, pricingUser = null) {
   const buttons = [];
   const amounts = getTopupAmounts();
+  const personalYear = getPersonalYearTopupRubles(pricingUser);
 
   // Если указана нужная сумма и её нет в стандартных - добавляем кнопку с нужной суммой
   if (requiredAmount && requiredAmount > 0 && !amounts.includes(requiredAmount)) {
-    const extraHint = hintForTopupRubles(requiredAmount, amounts);
+    const extraHint = hintForTopupRubles(requiredAmount, amounts, pricingUser);
     const extraLabel = extraHint
       ? `💰 Пополнить на ${ruMoney(requiredAmount)} (${extraHint})`
       : `💰 Пополнить на ${ruMoney(requiredAmount)}`;
     buttons.push([cb(extraLabel, `topup_${requiredAmount}`, "primary")]);
   }
 
+  if (personalYear && personalYear > 0) {
+    buttons.push([cb(`+ ${ruMoney(personalYear)} (год −20%)`, `topup_${personalYear}`, "success")]);
+  }
+
   amounts.forEach((amount, idx) => {
+    if (personalYear && amount === personalYear) return;
     const hint = TOPUP_DURATION_HINT[idx];
     const label = hint ? `+ ${ruMoney(amount)} (${hint})` : `+ ${ruMoney(amount)}`;
     buttons.push([cb(label, `topup_${amount}`, "primary")]);
@@ -278,6 +302,7 @@ module.exports = {
   getDiscountBanner,
   getPlanPrice,
   hasActiveYearRenewalDiscount,
+  getPersonalYearTopupRubles,
   PERSONAL_YEAR_RENEW_PERCENT,
   getTopupAmounts,
   getPlanDurationHint,
