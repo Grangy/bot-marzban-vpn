@@ -50,10 +50,12 @@ function getPlanPrice(planKey, pricingUser = null) {
   return discount.roundTo5(raw);
 }
 
-function getTopupAmounts() {
-  if (!isDiscountActive()) return TOPUP_AMOUNTS;
-  const cfg = discount.getConfig();
-  return TOPUP_AMOUNTS.map((a) => discount.roundTo5(a * (1 - cfg.percent / 100)));
+/** Порядок сумм пополнения совпадает с TOPUP_AMOUNTS / TOPUP_DURATION_HINT (D7…M12). */
+const TOPUP_PLAN_KEYS = ["D7", "M1", "M3", "M6", "M12"];
+
+/** Суммы «как в меню покупки»: глобальная скидка и персональная −20% на год (M12). */
+function getTopupAmounts(pricingUser = null) {
+  return TOPUP_PLAN_KEYS.map((k) => getPlanPrice(k, pricingUser));
 }
 
 const PLANS = {
@@ -258,7 +260,7 @@ function balanceMenu(balanceRub = 0, pricingUser = null) {
 
 function topupMenu(requiredAmount = null, pricingUser = null) {
   const buttons = [];
-  const amounts = getTopupAmounts();
+  const amounts = getTopupAmounts(pricingUser);
   const personalYear = getPersonalYearTopupRubles(pricingUser);
 
   // Если указана нужная сумма и её нет в стандартных - добавляем кнопку с нужной суммой

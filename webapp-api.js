@@ -3,7 +3,7 @@ const crypto = require("crypto");
 const { prisma } = require("./db");
 const { createInvoice } = require("./payment");
 const { createMarzbanUserOnBothServers } = require("./marzban-utils");
-const { PLANS, getPlanPrice, getTopupAmounts, getDiscountBanner, isDiscountActive } = require("./menus");
+const { PLANS, getPlanPrice, getDiscountBanner, isDiscountActive } = require("./menus");
 
 // Секретный ключ для API (должен быть в .env)
 const WEBAPP_SECRET = process.env.WEBAPP_SECRET || "maxgroot_webapp_secret_key_2026";
