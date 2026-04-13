@@ -881,11 +881,11 @@ function registerWebAppAPI(app) {
       }
 
       const amountNum = Number(amount);
-      if (amountNum < 50 || amountNum > 100000) {
+      if (!Number.isFinite(amountNum) || amountNum < 1 || amountNum > 100000) {
         return res.status(400).json({ 
           ok: false, 
           error: "INVALID_AMOUNT",
-          message: "Сумма должна быть от 50 до 100000 ₽" 
+          message: "Сумма должна быть от 1 до 100000 ₽" 
         });
       }
 
