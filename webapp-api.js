@@ -105,6 +105,13 @@ function resolveWebAppTelegramId(req) {
   return null;
 }
 
+function setNoStore(res) {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+  res.set("Vary", "X-Telegram-Init-Data");
+}
+
 /**
  * Регистрация Web App API endpoints
  */
@@ -764,6 +771,7 @@ function registerWebAppAPI(app) {
    * buyUrl — ссылка на бота для кнопки «Приобрести» (t.me/BOT?start=plan_M1…).
    */
   app.get("/api/plans", async (req, res) => {
+    setNoStore(res);
     const botUsername = process.env.BOT_USERNAME || "maxvpn_offbot";
     const baseUrl = `https://t.me/${botUsername}`;
 
@@ -777,6 +785,7 @@ function registerWebAppAPI(app) {
       }
     }
 
+    const hasPersonalYearDiscount = hasActiveYearRenewalDiscount(pricingUser);
     const plans = Object.entries(PLANS)
       .filter(([key]) => key !== "PROMO_10D" && key !== "FREE")
       .map(([key, plan]) => {
@@ -798,6 +807,10 @@ function registerWebAppAPI(app) {
       ok: true,
       data: plans,
       discountBanner: getDiscountBanner(),
+      meta: {
+        pricingResolvedBy: tid ? "user" : "fallback",
+        hasPersonalYearDiscount,
+      },
     });
   });
 
@@ -807,6 +820,7 @@ function registerWebAppAPI(app) {
    */
   app.get("/api/topup/presets", async (req, res) => {
     try {
+      setNoStore(res);
       const tid = resolveWebAppTelegramId(req);
       let pricingUser = null;
       if (tid) {
@@ -817,14 +831,22 @@ function registerWebAppAPI(app) {
         }
       }
       const amounts = getTopupAmountsForUser(pricingUser);
+      const hasPersonalYearDiscount = hasActiveYearRenewalDiscount(pricingUser);
       const presets = amounts.map((amount, idx) => ({
         amount,
         hint:
-          idx === 4 && hasActiveYearRenewalDiscount(pricingUser)
+          idx === 4 && hasPersonalYearDiscount
             ? "12 мес. −20%"
             : TOPUP_DURATION_HINT[idx],
       }));
-      res.json({ ok: true, data: { presets, discountBanner: getDiscountBanner() } });
+      res.json({
+        ok: true,
+        data: { presets, discountBanner: getDiscountBanner() },
+        meta: {
+          pricingResolvedBy: tid ? "user" : "fallback",
+          hasPersonalYearDiscount,
+        },
+      });
     } catch (e) {
       console.error("[WEBAPP] topup/presets error:", e);
       res.status(500).json({ ok: false, error: "SERVER_ERROR" });
