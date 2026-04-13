@@ -39,6 +39,9 @@ model User {
 
   noTrafficReminderSentAt DateTime?   // напоминание «купили, но не подключились» (2ч после покупки) отправлено
 
+  /// Персональная скидка −20% на тариф 12 мес. (M12) до этой даты (UTC)
+  yearRenewalDiscountEndsAt DateTime?
+
   @@unique([telegramId, chatId], name: "telegramId_chatId")
   @@index([telegramId])
   @@index([chatId])

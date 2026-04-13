@@ -23,9 +23,27 @@ function getDiscountBanner() {
   return discount.getDiscountBanner();
 }
 
-function getPlanPrice(planKey) {
+/** Персональная акция: −20% на год (M12) для отдельных пользователей (см. yearRenewalDiscountEndsAt). */
+const PERSONAL_YEAR_RENEW_PERCENT = 20;
+
+function hasActiveYearRenewalDiscount(pricingUser) {
+  if (!pricingUser || !pricingUser.yearRenewalDiscountEndsAt) return false;
+  return new Date(pricingUser.yearRenewalDiscountEndsAt) > new Date();
+}
+
+/**
+ * @param {string} planKey
+ * @param {null|{ yearRenewalDiscountEndsAt?: Date|string|null }} [pricingUser] — для M12 учитывает персональную акцию
+ */
+function getPlanPrice(planKey, pricingUser = null) {
   const plan = PLANS[planKey];
   if (!plan || !plan.price) return 0;
+
+  if (planKey === "M12" && hasActiveYearRenewalDiscount(pricingUser)) {
+    const raw = plan.price * (1 - PERSONAL_YEAR_RENEW_PERCENT / 100);
+    return discount.roundTo5(raw);
+  }
+
   if (!isDiscountActive()) return plan.price;
   const cfg = discount.getConfig();
   const raw = plan.price * (1 - cfg.percent / 100);
@@ -183,12 +201,12 @@ function mainMenu(balanceRub = 0) {
 }
 
 
-function buyMenu() {
-  const p7d = getPlanPrice("D7");
-  const p1 = getPlanPrice("M1");
-  const p3 = getPlanPrice("M3");
-  const p6 = getPlanPrice("M6");
-  const p12 = getPlanPrice("M12");
+function buyMenu(pricingUser = null) {
+  const p7d = getPlanPrice("D7", pricingUser);
+  const p1 = getPlanPrice("M1", pricingUser);
+  const p3 = getPlanPrice("M3", pricingUser);
+  const p6 = getPlanPrice("M6", pricingUser);
+  const p12 = getPlanPrice("M12", pricingUser);
   return Markup.inlineKeyboard([
     [cb(`${PLANS.D7.label} — ${ruMoney(p7d)} (${getPlanDurationHint("D7")})`, "buy_D7", "primary")],
     [cb(`${PLANS.M1.label} — ${ruMoney(p1)} (${getPlanDurationHint("M1")})`, "buy_M1", "primary")],
@@ -200,10 +218,10 @@ function buyMenu() {
 }
 
 /** Клавиатура для deep link ?start=plan_M1: выбран план — «Приобрести» и «В меню» */
-function planSelectedMenu(planKey) {
+function planSelectedMenu(planKey, pricingUser = null) {
   const plan = PLANS[planKey];
   if (!plan) return mainMenu(0);
-  const price = getPlanPrice(planKey);
+  const price = getPlanPrice(planKey, pricingUser);
   return Markup.inlineKeyboard([
     [cb(`🛒 Приобрести — ${ruMoney(price)} (${getPlanDurationHint(planKey)})`, `buy_${planKey}`, "primary")],
     [cb("📋 Другие тарифы", "buy")],
@@ -259,6 +277,8 @@ module.exports = {
   isDiscountActive,
   getDiscountBanner,
   getPlanPrice,
+  hasActiveYearRenewalDiscount,
+  PERSONAL_YEAR_RENEW_PERCENT,
   getTopupAmounts,
   getPlanDurationHint,
   ruMoney,

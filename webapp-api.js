@@ -743,14 +743,24 @@ function registerWebAppAPI(app) {
    * Получить список тарифов.
    * buyUrl — ссылка на бота для кнопки «Приобрести» (t.me/BOT?start=plan_M1…).
    */
-  app.get("/api/plans", (req, res) => {
+  app.get("/api/plans", async (req, res) => {
     const botUsername = process.env.BOT_USERNAME || "maxvpn_offbot";
     const baseUrl = `https://t.me/${botUsername}`;
+
+    let pricingUser = null;
+    const tid = req.query?.telegramId;
+    if (tid) {
+      try {
+        pricingUser = await getMainUser(String(tid));
+      } catch (_) {
+        pricingUser = null;
+      }
+    }
 
     const plans = Object.entries(PLANS)
       .filter(([key]) => key !== "PROMO_10D" && key !== "FREE")
       .map(([key, plan]) => {
-        const price = getPlanPrice(key);
+        const price = getPlanPrice(key, pricingUser);
         const months = plan.months || (plan.days ? plan.days / 30 : null);
         return {
           id: key,
@@ -979,8 +989,6 @@ function registerWebAppAPI(app) {
         });
       }
 
-      const price = getPlanPrice(planId);
-
       const mainUser = await getMainUser(telegramId);
       if (!mainUser) {
         return res.status(404).json({ 
@@ -999,6 +1007,8 @@ function registerWebAppAPI(app) {
           error: "USER_NOT_FOUND" 
         });
       }
+
+      const price = getPlanPrice(planId, user);
 
       if (user.balance < price) {
         return res.status(400).json({ 

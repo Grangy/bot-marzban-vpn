@@ -333,13 +333,13 @@ bot.action(/^guide_video_(ios|android|android_tv|windows|macos)$/, async (ctx) =
 
       const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
 
-      // Минимальная стоимость платного тарифа (с учётом скидки)
+      // Минимальная стоимость платного тарифа (с учётом скидки и персональной акции на год)
       const minPaidPrice = Math.min(
-        getPlanPrice("D7"),
-        getPlanPrice("M1"),
-        getPlanPrice("M3"),
-        getPlanPrice("M6"),
-        getPlanPrice("M12")
+        getPlanPrice("D7", user),
+        getPlanPrice("M1", user),
+        getPlanPrice("M3", user),
+        getPlanPrice("M6", user),
+        getPlanPrice("M12", user)
       );
       const banner = getDiscountBanner();
       const discountLine = banner ? `\n${banner}\n` : "\n";
@@ -354,7 +354,7 @@ bot.action(/^guide_video_(ios|android|android_tv|windows|macos)$/, async (ctx) =
       }
 
       const buyText = getDiscountBanner() ? `Выберите подписку:\n\n${getDiscountBanner()}` : "Выберите подписку:";
-      return editOrAnswer(ctx, buyText, buyMenu());
+      return editOrAnswer(ctx, buyText, buyMenu(user));
     });
 
     // Покупка конкретного плана
@@ -403,7 +403,8 @@ bot.action("balance_refresh", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     const planKey = ctx.match[1];
     const plan = PLANS[planKey];
-    const price = getPlanPrice(planKey);
+    const pricingUser = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+    const price = getPlanPrice(planKey, pricingUser);
 
     try {
       const result = await prisma.$transaction(async (tx) => {
@@ -507,7 +508,8 @@ setupStates.set(chatId, { subscriptionId: result.sub.id, step: 'device_select' }
 
     } catch (e) {
       console.error("buy error:", e);
-      await editOrAnswer(ctx, "Произошла ошибка. Попробуйте позже.", buyMenu());
+      const u = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+      await editOrAnswer(ctx, "Произошла ошибка. Попробуйте позже.", buyMenu(u));
     }
   });
 
@@ -754,10 +756,11 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
       return;
     }
 
+    const extendPricingUser = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
     const paidPlanKeys = ["M1", "M3", "M6", "M12"]; // D7 не используется для продления
     const buttons = paidPlanKeys.map((key) => {
       const plan = PLANS[key];
-      const price = getPlanPrice(key);
+      const price = getPlanPrice(key, extendPricingUser);
       return [cb(`${plan.label} — ${ruMoney(price)}`, `extend_${id}_${plan.type}`, "primary")];
     });
 
@@ -776,7 +779,6 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
     const id = parseInt(ctx.match[1], 10);
     const planKey = ctx.match[2];
     const plan = PLANS[planKey];
-    const price = getPlanPrice(planKey);
 
     const sub = await prisma.subscription.findUnique({ where: { id } });
     if (!sub || sub.userId !== ctx.dbUser.id) {
@@ -785,6 +787,7 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
     }
 
     const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+    const price = getPlanPrice(planKey, user);
     if (user.balance < price) {
       const requiredAmount = price - user.balance;
       const bannerExt = getDiscountBanner();

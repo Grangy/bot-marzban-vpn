@@ -260,14 +260,14 @@ bot.start(async (ctx) => {
       return;
     }
 
-    const price = getPlanPrice(planKey);
+    const price = getPlanPrice(planKey, user);
     const banner = getDiscountBanner();
     const discountLine = banner ? `\n\n${banner}\n` : "";
     const planText = `🛒 Выбран тариф: **${plan.label}** — ${ruMoney(price)} (${getPlanDurationHint(planKey)})${discountLine}Оплата производится с баланса в боте. Если средств не хватает — пополните баланс, затем нажмите «Приобрести».
 
 Выберите действие:`;
 
-    await ctx.replyWithMarkdown(planText, planSelectedMenu(planKey));
+    await ctx.replyWithMarkdown(planText, planSelectedMenu(planKey, user));
     return;
   }
 
