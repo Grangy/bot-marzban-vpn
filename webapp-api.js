@@ -95,6 +95,17 @@ function validateTelegramInitData(initData) {
 }
 
 /**
+ * Telegram ID для персональных цен: query ?telegramId=… или user из валидного X-Telegram-Init-Data.
+ */
+function resolveWebAppTelegramId(req) {
+  const q = req.query?.telegramId;
+  if (q != null && String(q).trim() !== "") return String(q).trim();
+  const id = req.telegramUser?.id;
+  if (id != null) return String(id);
+  return null;
+}
+
+/**
  * Регистрация Web App API endpoints
  */
 function registerWebAppAPI(app) {
@@ -757,10 +768,10 @@ function registerWebAppAPI(app) {
     const baseUrl = `https://t.me/${botUsername}`;
 
     let pricingUser = null;
-    const tid = req.query?.telegramId;
+    const tid = resolveWebAppTelegramId(req);
     if (tid) {
       try {
-        pricingUser = await getMainUser(String(tid));
+        pricingUser = await getMainUser(tid);
       } catch (_) {
         pricingUser = null;
       }
@@ -796,11 +807,11 @@ function registerWebAppAPI(app) {
    */
   app.get("/api/topup/presets", async (req, res) => {
     try {
-      const tid = req.query?.telegramId;
+      const tid = resolveWebAppTelegramId(req);
       let pricingUser = null;
       if (tid) {
         try {
-          pricingUser = await getMainUser(String(tid));
+          pricingUser = await getMainUser(tid);
         } catch (_) {
           pricingUser = null;
         }
@@ -1047,7 +1058,8 @@ function registerWebAppAPI(app) {
         });
       }
 
-      const price = getPlanPrice(planId, user);
+      // mainUser уже с merge yearRenewalDiscountEndsAt по telegramId; сырой user из БД — нет
+      const price = getPlanPrice(planId, mainUser);
 
       if (user.balance < price) {
         return res.status(400).json({ 

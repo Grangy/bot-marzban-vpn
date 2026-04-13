@@ -98,14 +98,31 @@ function formatDate(date) {
 }
 
 /**
+ * Подставить user к пополнениям отдельным запросом (устойчиво к сиротам userId без строки User).
+ */
+async function attachUsersToTopups(topups) {
+  if (topups.length === 0) return [];
+  const ids = [...new Set(topups.map((t) => t.userId))];
+  const users = await prisma.user.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, telegramId: true, accountName: true },
+  });
+  const byId = new Map(users.map((u) => [u.id, u]));
+  return topups.map((t) => ({
+    ...t,
+    user: byId.get(t.userId) ?? null,
+  }));
+}
+
+/**
  * Сформировать .xlsx со всеми успешными пополнениями. Возвращает { buffer, filename }.
  */
 async function buildTopupsXlsx() {
-  const topups = await prisma.topUp.findMany({
+  const topupsRaw = await prisma.topUp.findMany({
     where: { status: "SUCCESS" },
-    include: { user: { select: { telegramId: true, accountName: true } } },
     orderBy: { createdAt: "desc" },
   });
+  const topups = await attachUsersToTopups(topupsRaw);
 
   const fmtDate = (d) => {
     if (!d) return "";
@@ -164,7 +181,6 @@ async function getExtendedStats(startDate, endDate) {
         lte: endDate,
       },
     },
-    include: { user: true },
   });
 
   const totalAmount = topups.reduce((sum, t) => sum + t.amount, 0);
@@ -604,18 +620,18 @@ function initAdminNotifier(bot) {
     if (!isAdminGroup(ctx.chat?.id)) return;
     try {
       await ctx.answerCbQuery();
-      const topups = await prisma.topUp.findMany({
+      const topupsRaw = await prisma.topUp.findMany({
         take: 5,
         orderBy: { createdAt: "desc" },
-        include: { user: { select: { accountName: true, telegramId: true } } },
       });
+      const topups = await attachUsersToTopups(topupsRaw);
       if (topups.length === 0) {
         await ctx.reply("📭 Нет пополнений в базе");
         return;
       }
       let msg = "📋 <b>Последние 5 пополнений:</b>\n\n";
       for (const t of topups) {
-        const un = t.user?.accountName || "Без username";
+        const un = t.user == null ? `user #${t.userId} (нет в БД)` : (t.user.accountName || "Без username");
         const tid = t.user?.telegramId || "N/A";
         const em = t.status === "SUCCESS" ? "✅" : t.status === "FAILED" ? "❌" : t.status === "TIMEOUT" ? "⏳" : "⏸️";
         const cr = t.credited ? "💰" : "";
@@ -1203,19 +1219,12 @@ ${isReusable ? "✅ Промокод многоразовый - можно ис�
         }
       } else {
         // Показать 5 последних пополнений
-        const topups = await prisma.topUp.findMany({
+        const topupsRaw = await prisma.topUp.findMany({
           take: 5,
           orderBy: { createdAt: "desc" },
-          include: {
-            user: {
-              select: {
-                accountName: true,
-                telegramId: true
-              }
-            }
-          }
         });
-        
+        const topups = await attachUsersToTopups(topupsRaw);
+
         if (topups.length === 0) {
           return ctx.reply("📭 Нет пополнений в базе");
         }
@@ -1223,7 +1232,7 @@ ${isReusable ? "✅ Промокод многоразовый - можно ис�
         let msg = `📋 <b>Последние 5 пополнений:</b>\n\n`;
         
         for (const t of topups) {
-          const username = t.user?.accountName || "Без username";
+          const username = t.user == null ? `user #${t.userId} (нет в БД)` : (t.user.accountName || "Без username");
           const telegramId = t.user?.telegramId || "N/A";
           const statusEmoji = t.status === "SUCCESS" ? "✅" : t.status === "FAILED" ? "❌" : t.status === "TIMEOUT" ? "⏳" : "⏸️";
           const creditedMark = t.credited ? "💰" : "";
