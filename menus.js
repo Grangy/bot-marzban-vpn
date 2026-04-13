@@ -27,8 +27,10 @@ function getDiscountBanner() {
 const PERSONAL_YEAR_RENEW_PERCENT = 20;
 
 function hasActiveYearRenewalDiscount(pricingUser) {
-  if (!pricingUser || !pricingUser.yearRenewalDiscountEndsAt) return false;
-  return new Date(pricingUser.yearRenewalDiscountEndsAt) > new Date();
+  if (!pricingUser || pricingUser.yearRenewalDiscountEndsAt == null) return false;
+  const end = new Date(pricingUser.yearRenewalDiscountEndsAt);
+  if (Number.isNaN(end.getTime())) return false;
+  return end.getTime() > Date.now();
 }
 
 /**
@@ -48,22 +50,6 @@ function getPlanPrice(planKey, pricingUser = null) {
   const cfg = discount.getConfig();
   const raw = plan.price * (1 - cfg.percent / 100);
   return discount.roundTo5(raw);
-}
-
-/** Базовые суммы пополнения: только глобальная скидка из discount-config (как раньше). */
-function getTopupAmounts() {
-  if (!isDiscountActive()) return TOPUP_AMOUNTS;
-  const cfg = discount.getConfig();
-  return TOPUP_AMOUNTS.map((a) => discount.roundTo5(a * (1 - cfg.percent / 100)));
-}
-
-/** Для персональной акции на год подменяет в сетке последнюю сумму (12 мес.) на цену M12 для этого пользователя. */
-function getTopupAmountsForUser(pricingUser) {
-  const amounts = [...getTopupAmounts()];
-  if (hasActiveYearRenewalDiscount(pricingUser)) {
-    amounts[4] = getPlanPrice("M12", pricingUser);
-  }
-  return amounts;
 }
 
 const PLANS = {
@@ -109,6 +95,18 @@ const TOPUP_AMOUNTS = [99, 199, 499, 799, 1499];
 /** Подсказка срока для кнопок пополнения (тот же порядок, что у TOPUP_AMOUNTS) */
 const TOPUP_DURATION_HINT = ["1 неделя", "1 мес.", "3 мес.", "6 мес.", "12 мес."];
 
+/** Порядок кнопок пополнения = D7 … M12; суммы всегда как финальные цены в «Купить» для этого пользователя. */
+const TOPUP_PLAN_KEYS = ["D7", "M1", "M3", "M6", "M12"];
+
+function getTopupAmountsForUser(pricingUser = null) {
+  return TOPUP_PLAN_KEYS.map((k) => getPlanPrice(k, pricingUser));
+}
+
+/** Без учёта персональной акции (только глобальная скидка + базовые цены). */
+function getTopupAmounts() {
+  return getTopupAmountsForUser(null);
+}
+
 /** Краткая подпись срока для кнопок «Купить» / deep link (например «1 неделя», «3 мес.») */
 function getPlanDurationHint(planKey) {
   const p = PLANS[planKey];
@@ -132,9 +130,8 @@ function hintForTopupRubles(amount, amountsList, pricingUser = null) {
   }
   const i = amountsList.indexOf(amount);
   if (i >= 0 && TOPUP_DURATION_HINT[i]) return TOPUP_DURATION_HINT[i];
-  const planKeys = ["D7", "M1", "M3", "M6", "M12"];
-  for (let j = 0; j < planKeys.length; j++) {
-    if (getPlanPrice(planKeys[j], pricingUser) === amount) return TOPUP_DURATION_HINT[j];
+  for (let j = 0; j < TOPUP_PLAN_KEYS.length; j++) {
+    if (getPlanPrice(TOPUP_PLAN_KEYS[j], pricingUser) === amount) return TOPUP_DURATION_HINT[j];
   }
   return null;
 }
@@ -304,6 +301,7 @@ module.exports = {
   webAppBtn,
   PLANS,
   TOPUP_AMOUNTS,
+  TOPUP_PLAN_KEYS,
   isDiscountActive,
   getDiscountBanner,
   getPlanPrice,

@@ -3,7 +3,15 @@ const crypto = require("crypto");
 const { prisma } = require("./db");
 const { createInvoice } = require("./payment");
 const { createMarzbanUserOnBothServers } = require("./marzban-utils");
-const { PLANS, getPlanPrice, getDiscountBanner, isDiscountActive } = require("./menus");
+const {
+  PLANS,
+  getPlanPrice,
+  getDiscountBanner,
+  isDiscountActive,
+  getTopupAmountsForUser,
+  TOPUP_DURATION_HINT,
+  hasActiveYearRenewalDiscount,
+} = require("./menus");
 
 // Секретный ключ для API (должен быть в .env)
 const WEBAPP_SECRET = process.env.WEBAPP_SECRET || "maxgroot_webapp_secret_key_2026";
@@ -779,6 +787,36 @@ function registerWebAppAPI(app) {
       data: plans,
       discountBanner: getDiscountBanner(),
     });
+  });
+
+  /**
+   * GET /api/topup/presets?telegramId=
+   * Суммы кнопок пополнения как в боте (глобальная + персональная −20% на год).
+   */
+  app.get("/api/topup/presets", async (req, res) => {
+    try {
+      const tid = req.query?.telegramId;
+      let pricingUser = null;
+      if (tid) {
+        try {
+          pricingUser = await getMainUser(String(tid));
+        } catch (_) {
+          pricingUser = null;
+        }
+      }
+      const amounts = getTopupAmountsForUser(pricingUser);
+      const presets = amounts.map((amount, idx) => ({
+        amount,
+        hint:
+          idx === 4 && hasActiveYearRenewalDiscount(pricingUser)
+            ? "12 мес. −20%"
+            : TOPUP_DURATION_HINT[idx],
+      }));
+      res.json({ ok: true, data: { presets, discountBanner: getDiscountBanner() } });
+    } catch (e) {
+      console.error("[WEBAPP] topup/presets error:", e);
+      res.status(500).json({ ok: false, error: "SERVER_ERROR" });
+    }
   });
 
   /**
