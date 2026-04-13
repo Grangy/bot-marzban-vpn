@@ -23,11 +23,18 @@
     getPlanPrice,
     getDiscountBanner,
     isDiscountActive,
+    hasActiveYearRenewalDiscount,
     infoMenu,
     instructionsMenu,
     cb,
     urlBtn,
   } = require("./menus");
+  const { withMergedYearRenewalDiscount } = require("./pricing-user");
+
+  async function loadPricingUser(ctx) {
+    const u = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+    return withMergedYearRenewalDiscount(prisma, u);
+  }
   const MARZBAN_API_URL = process.env.MARZBAN_API_URL;
   const {
     createMarzbanUserOnBothServers,
@@ -331,7 +338,7 @@ bot.action(/^guide_video_(ios|android|android_tv|windows|macos)$/, async (ctx) =
     bot.action("buy", async (ctx) => {
       await safeAnswerCbQuery(ctx);
 
-      const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+      const user = await loadPricingUser(ctx);
 
       // Минимальная стоимость платного тарифа (с учётом скидки и персональной акции на год)
       const minPaidPrice = Math.min(
@@ -383,7 +390,7 @@ bot.action("privacy", async (ctx) => {
 
 bot.action("balance_topup", async (ctx) => {
   await safeAnswerCbQuery(ctx);
-  const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+  const user = await loadPricingUser(ctx);
   const banner = getDiscountBanner();
   const text = banner ? `Выберите сумму пополнения:\n\n${banner}` : "Выберите сумму пополнения:";
   await editOrAnswer(ctx, text, topupMenu(null, user));
@@ -391,11 +398,14 @@ bot.action("balance_topup", async (ctx) => {
 
 bot.action("balance_refresh", async (ctx) => {
   await safeAnswerCbQuery(ctx);
-  const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
-  const text =
+  const user = await loadPricingUser(ctx);
+  let text =
 `💼 Баланс: ${ruMoney(user.balance)}
 
 Ваш промокод: \`${user.promoCode}\``;
+  if (hasActiveYearRenewalDiscount(user)) {
+    text += `\n\n🎯 Персонально: год (12 мес.) — ${ruMoney(getPlanPrice("M12", user))} (до ${formatDate(user.yearRenewalDiscountEndsAt)})`;
+  }
   await editOrAnswer(ctx, text, balanceMenu(user.balance, user));
 });
 
@@ -404,7 +414,7 @@ bot.action("balance_refresh", async (ctx) => {
     await safeAnswerCbQuery(ctx);
     const planKey = ctx.match[1];
     const plan = PLANS[planKey];
-    const pricingUser = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+    const pricingUser = await loadPricingUser(ctx);
     const price = getPlanPrice(planKey, pricingUser);
 
     try {
@@ -437,8 +447,7 @@ bot.action("balance_refresh", async (ctx) => {
       });
 
       if (!result.ok) {
-        // Получаем актуальный баланс пользователя
-        const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+        const user = await loadPricingUser(ctx);
         const currentBalance = user?.balance || 0;
         const requiredAmount = price - currentBalance;
         const banner2 = getDiscountBanner();
@@ -509,7 +518,7 @@ setupStates.set(chatId, { subscriptionId: result.sub.id, step: 'device_select' }
 
     } catch (e) {
       console.error("buy error:", e);
-      const u = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+      const u = await loadPricingUser(ctx);
       await editOrAnswer(ctx, "Произошла ошибка. Попробуйте позже.", buyMenu(u));
     }
   });
@@ -518,13 +527,16 @@ setupStates.set(chatId, { subscriptionId: result.sub.id, step: 'device_select' }
 
 bot.action("balance", async (ctx) => {
   await safeAnswerCbQuery(ctx);
-  const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+  const user = await loadPricingUser(ctx);
 
-  const text =
+  let text =
 `💼 Баланс: ${ruMoney(user.balance)}
 
 Ваш промокод: \`${user.promoCode}\`
 (Активировать чужой код: /promo КОД)`;
+  if (hasActiveYearRenewalDiscount(user)) {
+    text += `\n\n🎯 Персонально: год (12 мес.) — ${ruMoney(getPlanPrice("M12", user))} (до ${formatDate(user.yearRenewalDiscountEndsAt)})`;
+  }
 
   await editOrAnswer(ctx, text, balanceMenu(user.balance, user));
 });
@@ -557,7 +569,7 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
 
   if (isNaN(amount) || amount <= 0) {
     console.warn(`[TOPUP] Invalid amount: "${ctx.match[1]}"`);
-    const u = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+    const u = await loadPricingUser(ctx);
     return ctx.reply("Некорректная сумма пополнения.", topupMenu(null, u));
   }
 
@@ -596,7 +608,7 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
       errorMessage = "Ошибка конфигурации платежной системы. Обратитесь в поддержку.";
     }
     
-    const u = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+    const u = await loadPricingUser(ctx);
     await ctx.reply(`${errorMessage}\n\nЕсли проблема повторяется, обратитесь в поддержку: @supmaxgroot`, topupMenu(null, u));
   }
 });
@@ -759,7 +771,7 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
       return;
     }
 
-    const extendPricingUser = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+    const extendPricingUser = await loadPricingUser(ctx);
     const paidPlanKeys = ["M1", "M3", "M6", "M12"]; // D7 не используется для продления
     const buttons = paidPlanKeys.map((key) => {
       const plan = PLANS[key];
@@ -789,7 +801,7 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
       return;
     }
 
-    const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+    const user = await loadPricingUser(ctx);
     const price = getPlanPrice(planKey, user);
     if (user.balance < price) {
       const requiredAmount = price - user.balance;

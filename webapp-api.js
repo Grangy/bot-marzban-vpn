@@ -12,6 +12,7 @@ const {
   TOPUP_DURATION_HINT,
   hasActiveYearRenewalDiscount,
 } = require("./menus");
+const { withMergedYearRenewalDiscount } = require("./pricing-user");
 
 // Секретный ключ для API (должен быть в .env)
 const WEBAPP_SECRET = process.env.WEBAPP_SECRET || "maxgroot_webapp_secret_key_2026";
@@ -127,7 +128,7 @@ function registerWebAppAPI(app) {
     });
 
     if (user) {
-      return user;
+      return withMergedYearRenewalDiscount(prisma, user);
     }
 
     // Если не нашли пользователя из ЛС, ищем вообще всех (fallback для диагностики)
@@ -163,7 +164,7 @@ function registerWebAppAPI(app) {
       return a.user.id - b.user.id;
     });
 
-    return usersWithActivity[0].user;
+    return withMergedYearRenewalDiscount(prisma, usersWithActivity[0].user);
   }
 
   /**

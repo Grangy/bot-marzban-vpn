@@ -149,8 +149,9 @@ async function main() {
   console.log(JSON.stringify({ started: true, ...stats, delayMs: DELAY_MS }, null, 2));
 
   if (!DRY_RUN && recipients.length > 0) {
+    const telegramIds = [...new Set(recipients.map((r) => String(r.telegramId)))];
     const upd = await prisma.user.updateMany({
-      where: { id: { in: recipients.map((r) => r.id) } },
+      where: { telegramId: { in: telegramIds } },
       data: { yearRenewalDiscountEndsAt: until },
     });
     stats.updated = upd.count;

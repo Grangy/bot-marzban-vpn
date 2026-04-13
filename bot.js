@@ -15,6 +15,7 @@ const { registerActions } = require("./actions");
 const { registerPromo } = require("./promo");
 const { redeemClaim } = require("./hp-claim");
 const { remnawaveGetUser, remnawaveResolveUuidByUsername, remnawaveAddTrafficGb } = require("./marzban-utils");
+const { withMergedYearRenewalDiscount } = require("./pricing-user");
 const crypto = require("crypto");
 
 
@@ -108,11 +109,12 @@ bot.start(async (ctx) => {
     return ctx.reply("❌ Ошибка инициализации. Попробуйте еще раз.");
   }
 
-  const user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
+  let user = await prisma.user.findUnique({ where: { id: ctx.dbUser.id } });
   if (!user) {
     console.error("[BOT] User not found in database:", ctx.dbUser.id);
     return ctx.reply("❌ Пользователь не найден. Попробуйте еще раз.");
   }
+  user = await withMergedYearRenewalDiscount(prisma, user);
 
   const raw = (ctx.message?.text || "").trim();
 

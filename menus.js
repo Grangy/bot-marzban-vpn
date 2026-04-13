@@ -301,6 +301,7 @@ module.exports = {
   webAppBtn,
   PLANS,
   TOPUP_AMOUNTS,
+  TOPUP_DURATION_HINT,
   TOPUP_PLAN_KEYS,
   isDiscountActive,
   getDiscountBanner,
