@@ -48,6 +48,8 @@ scripts/new-api/*.jks
 # Локальные файлы с реальными ключами (НИКОГДА не коммитить)
 scripts/new-api/PROD_BOT_REMNAWAVE_KEYS.md
 scripts/new-api/*keys*.md
+# Remnawave: доступ, curl, ключи (заполняется локально)
+REMNAWAVE-ACCESS.local.md
 # Документация (можно добавить обратно, если нужна в Git)
 # PROMO_API_DOCUMENTATION.md
 # PROMO_SYSTEM_UPDATE.md
