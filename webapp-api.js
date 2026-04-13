@@ -13,6 +13,7 @@ const {
   hasActiveYearRenewalDiscount,
 } = require("./menus");
 const { withMergedYearRenewalDiscount } = require("./pricing-user");
+const { getOrCreateUserForLead } = require("./lead-identity");
 
 // Секретный ключ для API (должен быть в .env)
 const WEBAPP_SECRET = process.env.WEBAPP_SECRET || "maxgroot_webapp_secret_key_2026";
@@ -855,17 +856,27 @@ function registerWebAppAPI(app) {
 
   /**
    * POST /api/topup/create
-   * Создать счёт на пополнение баланса
+   * Создать счёт на пополнение баланса.
+   * Тело: { telegramId, amount } как раньше, или { lead_type, lead_code, amount } — код ровно 7 символов A–Z/a–z/0–9.
+   * Если переданы и telegramId, и lead_* — используется только telegramId.
    */
   app.post("/api/topup/create", async (req, res) => {
     try {
-      const { telegramId, amount } = req.body;
+      const { telegramId, amount, lead_type, lead_code } = req.body || {};
 
-      if (!telegramId || !amount) {
-        return res.status(400).json({ 
-          ok: false, 
+      const hasTg = telegramId != null && String(telegramId).trim() !== "";
+      const hasLead =
+        lead_type != null &&
+        String(lead_type).trim() !== "" &&
+        lead_code != null &&
+        String(lead_code).trim() !== "";
+
+      if ((!hasTg && !hasLead) || amount == null || amount === "") {
+        return res.status(400).json({
+          ok: false,
           error: "INVALID_PARAMS",
-          message: "telegramId и amount обязательны" 
+          message:
+            "Нужны amount и либо telegramId, либо пара lead_type + lead_code (код 7 символов A–Z, 0–9)",
         });
       }
 
@@ -878,23 +889,53 @@ function registerWebAppAPI(app) {
         });
       }
 
-      const mainUser = await getMainUser(telegramId);
-      if (!mainUser) {
-        return res.status(404).json({ 
-          ok: false, 
-          error: "USER_NOT_FOUND" 
-        });
-      }
+      let user = null;
+      /** @type {{ leadType: string, leadCode: string, leadUserCreated: boolean } | null} */
+      let leadInfo = null;
 
-      const user = await prisma.user.findUnique({
-        where: { id: mainUser.id }
-      });
-
-      if (!user) {
-        return res.status(404).json({ 
-          ok: false, 
-          error: "USER_NOT_FOUND" 
+      if (hasTg) {
+        const mainUser = await getMainUser(telegramId);
+        if (!mainUser) {
+          return res.status(404).json({ 
+            ok: false, 
+            error: "USER_NOT_FOUND" 
+          });
+        }
+        user = await prisma.user.findUnique({
+          where: { id: mainUser.id }
         });
+        if (!user) {
+          return res.status(404).json({ 
+            ok: false, 
+            error: "USER_NOT_FOUND" 
+          });
+        }
+      } else {
+        try {
+          const r = await getOrCreateUserForLead(prisma, lead_type, lead_code);
+          user = r.user;
+          leadInfo = {
+            leadType: r.leadType,
+            leadCode: r.leadCode,
+            leadUserCreated: r.created,
+          };
+        } catch (e) {
+          if (e.code === "INVALID_LEAD_TYPE") {
+            return res.status(400).json({
+              ok: false,
+              error: "INVALID_LEAD_TYPE",
+              message: "lead_type: 1–32 символа, латиница/цифры/_",
+            });
+          }
+          if (e.code === "INVALID_LEAD_CODE") {
+            return res.status(400).json({
+              ok: false,
+              error: "INVALID_LEAD_CODE",
+              message: "lead_code: ровно 7 символов (A–Z, a–z, 0–9)",
+            });
+          }
+          throw e;
+        }
       }
 
       // Создаем счёт через Platega
@@ -907,7 +948,8 @@ function registerWebAppAPI(app) {
           orderId: result.topup.orderId,
           amount: amountNum,
           paymentUrl: result.link,
-          isFallback: result.isFallback || false
+          isFallback: result.isFallback || false,
+          ...(leadInfo ? { lead: leadInfo } : {}),
         }
       });
     } catch (error) {

@@ -42,9 +42,25 @@ model User {
   /// Персональная скидка −20% на тариф 12 мес. (M12) до этой даты (UTC)
   yearRenewalDiscountEndsAt DateTime?
 
+  /// Лид из внешнего трафика (оплата без telegramId в API): пара leadType + leadCode
+  leadIdentity LeadIdentity?
+
   @@unique([telegramId, chatId], name: "telegramId_chatId")
   @@index([telegramId])
   @@index([chatId])
+}
+
+/// Идентификация лида для POST /api/topup/create без telegramId (lead_type + ровно 7 символов кода)
+model LeadIdentity {
+  id        Int      @id @default(autoincrement())
+  leadType  String
+  leadCode  String
+  userId    Int      @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([leadType, leadCode])
+  @@index([leadType])
 }
 
 model PromoActivation {
