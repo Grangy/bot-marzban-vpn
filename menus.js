@@ -55,31 +55,31 @@ function getPlanPrice(planKey, pricingUser = null) {
 const PLANS = {
   D7: {
     label: "7 дней",
-    price: 99,
+    price: 129,
     days: 7,
     type: "D7"
   },
   M1: {
     label: "1 месяц",
-    price: 199,
+    price: 299,
     months: 1,
     type: "M1"
   },
   M3: {
     label: "3 месяца",
-    price: 499,
+    price: 749,
     months: 3,
     type: "M3"
   },
   M6: {
     label: "6 месяцев",
-    price: 799,
+    price: 1099,
     months: 6,
     type: "M6"
   },
   M12: {
     label: "12 месяцев",
-    price: 1499,
+    price: 1799,
     months: 12,
     type: "M12"
   },
@@ -90,7 +90,7 @@ const PLANS = {
     type: "PROMO_10D"
   },
 };
-const TOPUP_AMOUNTS = [99, 199, 499, 799, 1499];
+const TOPUP_AMOUNTS = [129, 299, 749, 1099, 1799];
 
 /** Подсказка срока для кнопок пополнения (тот же порядок, что у TOPUP_AMOUNTS) */
 const TOPUP_DURATION_HINT = ["1 неделя", "1 мес.", "3 мес.", "6 мес.", "12 мес."];
