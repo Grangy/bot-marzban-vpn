@@ -3,6 +3,7 @@ const bus = require("./events");
 const { prisma } = require("./db");
 const { ruMoney, instructionsMenu, paymentSuccessMenu, cb } = require("./menus");
 const { Markup } = require("telegraf");
+const { tryAutoActivateFromTopup } = require("./subscription-auto-activate");
 
 /**
  * Подключает слушателей к событиям оплаты и шлёт сообщения пользователю.
@@ -18,6 +19,13 @@ function initNotifier(bot) {
       const user = await prisma.user.findUnique({ where: { id: topup.userId } });
       if (!user?.chatId) {
         console.warn(`[NOTIFY] No chatId for user ${user?.id}`);
+        return;
+      }
+
+      const autoRes = await tryAutoActivateFromTopup(topupId);
+      if (autoRes.activated) {
+        await bot.telegram.sendMessage(user.chatId, autoRes.message, instructionsMenu());
+        console.log(`[NOTIFY] Auto-activation sent to chatId=${user.chatId} for topup=${topupId}`);
         return;
       }
 
