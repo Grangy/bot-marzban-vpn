@@ -140,27 +140,29 @@ function registerBroadcastAPI(app) {
 
       const privateChatUsers = allUsers.filter(u => u.chatId === String(u.telegramId));
 
-      // Активные подписки
+      // Активные подписки (без include user — иначе Prisma падает на «осиротевших» userId)
       const activeSubscriptions = await prisma.subscription.findMany({
         where: {
           endDate: { gt: now },
           type: { not: "FREE" }
         },
-        include: {
-          user: {
-            select: {
-              id: true,
-              chatId: true,
-              telegramId: true
-            }
-          }
-        }
+        select: { id: true, userId: true }
       });
+
+      const subUserIds = [...new Set(activeSubscriptions.map((s) => s.userId))];
+      const subUsers =
+        subUserIds.length === 0
+          ? []
+          : await prisma.user.findMany({
+              where: { id: { in: subUserIds } },
+              select: { id: true, chatId: true, telegramId: true }
+            });
+      const userById = new Map(subUsers.map((u) => [u.id, u]));
 
       const activeUsers = new Set();
       for (const sub of activeSubscriptions) {
-        const user = sub.user;
-        if (user.chatId && user.chatId === String(user.telegramId)) {
+        const user = userById.get(sub.userId);
+        if (user?.chatId && user.chatId === String(user.telegramId)) {
           activeUsers.add(user.id);
         }
       }
