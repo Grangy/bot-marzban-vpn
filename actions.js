@@ -43,6 +43,33 @@
     remnawaveCreateUser,
   } = require("./marzban-utils");
 
+  async function recoverMissingSubscriptionLink(sub, dbUser) {
+    if (!sub || sub.subscriptionUrl || !dbUser) return sub;
+    if (!["D7", "M1", "M3", "M6", "M12"].includes(String(sub.type))) return sub;
+    if (!sub.endDate) return sub;
+
+    try {
+      const msLeft = new Date(sub.endDate).getTime() - Date.now();
+      const daysLeft = Math.max(1, Math.ceil(msLeft / 86400000));
+      const suffix = Math.random().toString(16).slice(2, 8);
+      const username = `${dbUser.telegramId}_${sub.type}_${sub.id}_recover_${suffix}`;
+      const created = await remnawaveCreateUser({ username, days: daysLeft, gb: 0 });
+      if (!created?.subscriptionUrl || !created?.uuid) return sub;
+
+      return await prisma.subscription.update({
+        where: { id: sub.id },
+        data: {
+          subscriptionUrl: created.subscriptionUrl,
+          subscriptionUrl2: null,
+          remnawaveUuid: created.uuid,
+        },
+      });
+    } catch (e) {
+      console.warn("[SUB RECOVER] Failed to recover missing link:", e?.message || e);
+      return sub;
+    }
+  }
+
   // Хранилище состояний настройки после покупки: chatId -> { subscriptionId, step, device }
   const setupStates = new Map();
 
@@ -752,12 +779,14 @@ bot.action(/^topup_(\d+)$/, async (ctx) => {
       await safeAnswerCbQuery(ctx);
       const id = parseInt(ctx.match[1], 10);
       const page = Math.max(0, parseInt(ctx.match[2] || "0", 10) || 0);
-      const s = await prisma.subscription.findUnique({ where: { id } });
+      let s = await prisma.subscription.findUnique({ where: { id } });
 
       if (!s || s.userId !== ctx.dbUser.id) {
         await editOrAnswer(ctx, "Подписка не найдена.", mainMenu());
         return;
       }
+
+      s = await recoverMissingSubscriptionLink(s, ctx.dbUser);
 
   const label = getDisplayLabel(s);
   let text = `📦 Подписка: ${label}
