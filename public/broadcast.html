@@ -164,6 +164,14 @@
     let ADMIN_SECRET = null;
     let selectedFiles = [];
 
+    /** Заголовки fetch — только Latin-1; UTF-8 секрет кодируем в Base64 (сервер принимает и plain, и Base64). */
+    function adminSecretHeaderValue(secret) {
+      const bytes = new TextEncoder().encode(secret);
+      let bin = '';
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      return btoa(bin);
+    }
+
     function toast(msg, type = 'info') {
       const el = document.createElement('div');
       el.className = `toast px-4 py-3 rounded-xl shadow-lg ${type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-emerald-500' : 'bg-gray-800 dark:bg-gray-700'} text-white text-sm`;
@@ -420,7 +428,7 @@
       try {
         const resp = await fetch(`${API_URL}/admin/broadcast/send`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': ADMIN_SECRET },
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Secret': adminSecretHeaderValue(ADMIN_SECRET) },
           body: JSON.stringify(body)
         });
         const data = await resp.json();
@@ -481,7 +489,7 @@
     async function loadStats() {
       const errEl = document.getElementById('keyError');
       try {
-        const r = await fetch(`${API_URL}/admin/broadcast/stats`, { headers: { 'X-Admin-Secret': ADMIN_SECRET } });
+        const r = await fetch(`${API_URL}/admin/broadcast/stats`, { headers: { 'X-Admin-Secret': adminSecretHeaderValue(ADMIN_SECRET) } });
         let data = {};
         try {
           data = await r.json();

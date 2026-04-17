@@ -6,19 +6,33 @@ const { Markup } = require("telegraf");
 const ADMIN_BROADCAST_SECRET = process.env.ADMIN_BROADCAST_SECRET || "maxgroot_admin_broadcast_2026";
 
 /**
+ * Fetch API допускает в заголовках только ISO-8859-1; браузер шлёт UTF-8 секрет в Base64.
+ * Принимаем: сырое значение (curl / ASCII) или Base64(UTF-8 bytes).
+ */
+function adminSecretMatches(rawHeader) {
+  if (rawHeader == null || String(rawHeader).trim() === "") return false;
+  const s = String(rawHeader).trim();
+  if (s === ADMIN_BROADCAST_SECRET) return true;
+  try {
+    const dec = Buffer.from(s, "base64").toString("utf8");
+    return dec === ADMIN_BROADCAST_SECRET;
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
  * Middleware для проверки авторизации админа
  */
 function adminAuthMiddleware(req, res, next) {
-  const authHeader = req.headers["x-admin-secret"];
-  
-  if (authHeader !== ADMIN_BROADCAST_SECRET) {
+  if (!adminSecretMatches(req.headers["x-admin-secret"])) {
     return res.status(401).json({
       ok: false,
       error: "UNAUTHORIZED",
       message: "Invalid admin secret"
     });
   }
-  
+
   next();
 }
 
@@ -188,4 +202,8 @@ function registerBroadcastAPI(app) {
   console.log("📢 Broadcast API endpoints registered");
 }
 
-module.exports = { registerBroadcastAPI, ADMIN_BROADCAST_SECRET };
+module.exports = {
+  registerBroadcastAPI,
+  ADMIN_BROADCAST_SECRET,
+  adminSecretMatches,
+};

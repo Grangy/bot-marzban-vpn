@@ -1,7 +1,7 @@
 // promo-api.js - API для работы с промокодами
 const { prisma } = require("./db");
 const { ruMoney } = require("./menus");
-const { ADMIN_BROADCAST_SECRET } = require("./broadcast-api");
+const { ADMIN_BROADCAST_SECRET, adminSecretMatches } = require("./broadcast-api");
 const { activatePromoCode, detectPromoType, PROMO_TYPES } = require("./promo-manager");
 const { getReferralStats } = require("./referral-bonus");
 
@@ -9,16 +9,14 @@ const { getReferralStats } = require("./referral-bonus");
  * Middleware для проверки админ-доступа
  */
 function adminAuthMiddleware(req, res, next) {
-  const authHeader = req.headers["x-admin-secret"];
-  
-  if (authHeader !== ADMIN_BROADCAST_SECRET) {
+  if (!adminSecretMatches(req.headers["x-admin-secret"])) {
     return res.status(401).json({
       ok: false,
       error: "UNAUTHORIZED",
       message: "Invalid admin secret"
     });
   }
-  
+
   next();
 }
 
