@@ -479,23 +479,42 @@
     });
 
     async function loadStats() {
+      const errEl = document.getElementById('keyError');
       try {
         const r = await fetch(`${API_URL}/admin/broadcast/stats`, { headers: { 'X-Admin-Secret': ADMIN_SECRET } });
-        const data = await r.json();
-        if (data.ok && data.stats) {
-          document.getElementById('totalUsers').textContent = data.stats.totalUsers ?? 0;
-          document.getElementById('activeUsers').textContent = data.stats.activeUsers ?? 0;
-        } else if (!r.ok || data.error === 'UNAUTHORIZED') {
+        let data = {};
+        try {
+          data = await r.json();
+        } catch (_) {}
+
+        if (r.status === 401 || data.error === 'UNAUTHORIZED') {
           localStorage.removeItem(STORAGE_KEY);
           ADMIN_SECRET = null;
           document.getElementById('mainContainer').classList.add('hidden');
           showKeyModal();
-          const errEl = document.getElementById('keyError');
-          errEl.textContent = '❌ Неверный ключ';
+          errEl.textContent = 'Неверный ключ — введите ADMIN_BROADCAST_SECRET с сервера бота (не дефолт из репозитория)';
           errEl.classList.remove('hidden');
+          return;
+        }
+
+        if (!r.ok) {
+          errEl.textContent = `Ошибка сервера ${r.status}: ${data.message || data.error || 'см. консоль'}`;
+          errEl.classList.remove('hidden');
+          toast(errEl.textContent, 'error');
+          return;
+        }
+
+        if (data.ok && data.stats) {
+          errEl.classList.add('hidden');
+          errEl.textContent = '';
+          document.getElementById('totalUsers').textContent = data.stats.totalUsers ?? 0;
+          document.getElementById('activeUsers').textContent = data.stats.activeUsers ?? 0;
         }
       } catch (e) {
         console.error('loadStats', e);
+        errEl.textContent = 'Нет связи с API. Проверьте сеть и что grangy.ru проксирует /admin/broadcast/* на процесс бота.';
+        errEl.classList.remove('hidden');
+        toast(errEl.textContent, 'error');
       }
     }
   </script>
