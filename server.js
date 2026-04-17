@@ -23,6 +23,12 @@ function createServer() {
 
   // Статические файлы (для веб-интерфейса рассылок)
   app.use(express.static(path.join(__dirname, "public")));
+  app.get("/broadcast", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "broadcast.html"));
+  });
+  app.get("/admin/broadcast", (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "broadcast.html"));
+  });
 
   app.get("/health", (req, res) => {
     res.status(200).send("✅ Payment server is running");
