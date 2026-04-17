@@ -484,6 +484,18 @@ bot.action("balance_refresh", async (ctx) => {
       const { url1: subscriptionUrl, url2: subscriptionUrl2, remnawaveUuid } =
         await createMarzbanUserOnBothServers(userData);
 
+      // Fail-safe: без ссылки подписка не считается оформленной — откатываем списание и запись подписки
+      if (!subscriptionUrl) {
+        await prisma.$transaction(async (tx) => {
+          await tx.user.update({
+            where: { id: ctx.dbUser.id },
+            data: { balance: { increment: price } },
+          });
+          await tx.subscription.deleteMany({ where: { id: result.sub.id } });
+        });
+        throw new Error("SUBSCRIPTION_PROVISION_FAILED");
+      }
+
       // Сохраняем ссылки и uuid Remnawave (нужен для продления)
       await prisma.subscription.update({
         where: { id: result.sub.id },
@@ -519,6 +531,14 @@ setupStates.set(chatId, { subscriptionId: result.sub.id, step: 'device_select' }
     } catch (e) {
       console.error("buy error:", e);
       const u = await loadPricingUser(ctx);
+      if (String(e?.message || "") === "SUBSCRIPTION_PROVISION_FAILED") {
+        await editOrAnswer(
+          ctx,
+          "❌ Не удалось получить ссылку подписки от VPN API. Деньги не списаны (баланс автоматически возвращён). Попробуйте ещё раз через минуту.",
+          buyMenu(u)
+        );
+        return;
+      }
       await editOrAnswer(ctx, "Произошла ошибка. Попробуйте позже.", buyMenu(u));
     }
   });

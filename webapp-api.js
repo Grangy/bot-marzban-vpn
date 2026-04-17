@@ -1220,6 +1220,22 @@ function registerWebAppAPI(app) {
 
       const { url1, url2, remnawaveUuid } = await createMarzbanUserOnBothServers(userData);
 
+      if (!url1) {
+        // Fail-safe: если ссылка не получена, откатываем покупку полностью
+        await prisma.$transaction(async (tx) => {
+          await tx.user.update({
+            where: { id: user.id },
+            data: { balance: { increment: price } },
+          });
+          await tx.subscription.deleteMany({ where: { id: result.id } });
+        });
+        return res.status(502).json({
+          ok: false,
+          error: "SUBSCRIPTION_PROVISION_FAILED",
+          message: "VPN API не вернул ссылку подписки. Списание отменено, попробуйте позже.",
+        });
+      }
+
       // Обновляем подписку с URL и uuid Remnawave
       const updatedSub = await prisma.subscription.update({
         where: { id: result.id },

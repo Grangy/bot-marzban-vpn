@@ -159,12 +159,35 @@ async function createUserOnRemnawave(userData) {
       return empty;
     }
 
-    const subscriptionUrl = pickSubscriptionUrlFromRemnawaveBody(json);
-    const uuid = pickUuidFromRemnawaveBody(json);
+    let subscriptionUrl = pickSubscriptionUrlFromRemnawaveBody(json);
+    let uuid = pickUuidFromRemnawaveBody(json);
+
+    // Иногда Remnawave возвращает ссылку не сразу после create — дожидаемся через GET /v1/users/:id
     if (!subscriptionUrl) {
-      console.warn("[Remnawave] User created but subscription URL not found in response:", text.slice(0, 500));
+      console.warn("[Remnawave] User created but subscription URL not found in create response; retrying fetch user");
+      const ids = [];
+      if (uuid) ids.push(uuid);
+      ids.push(String(userData.username || "").trim());
+
+      for (const id of ids) {
+        if (!id) continue;
+        for (let attempt = 1; attempt <= 12; attempt++) {
+          const info = await remnawaveGetUser(id);
+          if (info?.subscriptionUrl) {
+            subscriptionUrl = info.subscriptionUrl;
+            if (!uuid && info.uuid) uuid = info.uuid;
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+        if (subscriptionUrl) break;
+      }
+    }
+
+    if (!subscriptionUrl) {
+      console.warn("[Remnawave] User created but subscription URL not found after retries:", text.slice(0, 500));
     } else {
-      console.log(`[Remnawave] User created, subscription URL OK`);
+      console.log("[Remnawave] User created, subscription URL resolved");
     }
     if (!uuid) {
       console.warn("[Remnawave] User created but uuid not in response — продление может не сработать");
