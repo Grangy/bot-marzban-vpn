@@ -16,10 +16,14 @@
  *   node scripts/fix-orphan-users.js
  *   DRY_RUN=1 node scripts/fix-orphan-users.js
  */
+require("dotenv").config();
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 const DRY_RUN = String(process.env.DRY_RUN || "") === "1";
+const REMNAWAVE_API_URL = String(process.env.REMNAWAVE_API_URL || "").replace(/\/$/, "");
+const REMNAWAVE_API_KEY = String(process.env.REMNAWAVE_API_KEY || process.env.API_ACCESS_KEY || "");
+const CAN_USE_REMNAWAVE = Boolean(REMNAWAVE_API_URL && REMNAWAVE_API_KEY);
 
 function uniq(arr) {
   return [...new Set(arr)];
@@ -52,39 +56,22 @@ async function userExistsById(id) {
 }
 
 async function getOrphanUserIds() {
-  const [subs, topups, refOwner, refAct, promoOwner, promoAct] = await Promise.all([
+  const [subs, topups, refOwner, promo] = await Promise.all([
     prisma.subscription.findMany({ select: { userId: true } }),
     prisma.topUp.findMany({ select: { userId: true } }),
     prisma.referralBonus.findMany({ select: { codeOwnerId: true, activatorId: true } }),
-    prisma.promoActivation.findMany({ select: { codeOwnerId: true, activatorId: true } }),
-    prisma.promoActivation.findMany({ select: { codeOwnerId: true, activatorId: true } }), // same table; kept for symmetry
-    prisma.promoActivation.findMany({ select: { codeOwnerId: true, activatorId: true } }),
-  ]).catch(async (e) => {
-    // promoActivation exists, but keep fail-safe for older schemas
-    if (String(e?.message || "").includes("promoActivation")) {
-      return [
-        await prisma.subscription.findMany({ select: { userId: true } }),
-        await prisma.topUp.findMany({ select: { userId: true } }),
-        await prisma.referralBonus.findMany({ select: { codeOwnerId: true, activatorId: true } }),
-        [],
-        [],
-        [],
-      ];
-    }
-    throw e;
-  });
+    prisma.promoActivation
+      .findMany({ select: { codeOwnerId: true, activatorId: true } })
+      .catch(() => []),
+  ]);
 
   const candidateIds = uniq([
     ...subs.map((s) => s.userId),
     ...topups.map((t) => t.userId),
     ...refOwner.map((r) => r.codeOwnerId),
     ...refOwner.map((r) => r.activatorId),
-    ...refAct.map((r) => r.codeOwnerId),
-    ...refAct.map((r) => r.activatorId),
-    ...promoOwner.map((p) => p.codeOwnerId),
-    ...promoOwner.map((p) => p.activatorId),
-    ...promoAct.map((p) => p.codeOwnerId),
-    ...promoAct.map((p) => p.activatorId),
+    ...promo.map((p) => p.codeOwnerId),
+    ...promo.map((p) => p.activatorId),
   ].filter((x) => Number.isFinite(Number(x))));
 
   const existing = await prisma.user.findMany({
@@ -98,9 +85,10 @@ async function getOrphanUserIds() {
 async function inferTelegramIdForOrphanUserId(orphanUserId) {
   const subs = await prisma.subscription.findMany({
     where: { userId: orphanUserId },
-    select: { subscriptionUrl: true, subscriptionUrl2: true },
+    select: { subscriptionUrl: true, subscriptionUrl2: true, remnawaveUuid: true },
     take: 50,
   });
+
   for (const s of subs) {
     for (const u of [s.subscriptionUrl, s.subscriptionUrl2]) {
       const token = tokenFromSubUrl(u);
@@ -108,7 +96,47 @@ async function inferTelegramIdForOrphanUserId(orphanUserId) {
       if (tg) return tg;
     }
   }
+
+  // Remnawave fallback: try resolve user by uuid and parse telegramId from username/fields.
+  if (CAN_USE_REMNAWAVE) {
+    for (const s of subs) {
+      const uuid = s.remnawaveUuid;
+      if (!uuid) continue;
+      const tg = await tryResolveTelegramIdFromRemnawave(uuid);
+      if (tg) return tg;
+    }
+  }
+
   return null;
+}
+
+async function tryResolveTelegramIdFromRemnawave(remnawaveUuid) {
+  const id = String(remnawaveUuid || "").trim();
+  if (!id) return null;
+  try {
+    const r = await fetch(`${REMNAWAVE_API_URL}/v1/users/${encodeURIComponent(id)}`, {
+      headers: { "x-api-key": REMNAWAVE_API_KEY },
+    });
+    const text = await r.text();
+    if (!r.ok) return null;
+    let json = {};
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      json = {};
+    }
+    const u = json?.user?.response && typeof json.user.response === "object" ? json.user.response : json?.user;
+    const direct = u?.telegramId || u?.telegram_id || u?.telegram || null;
+    if (direct != null && /^\d{5,20}$/.test(String(direct))) return String(direct);
+    const username = u?.username;
+    if (typeof username === "string") {
+      const tg = username.split("_", 1)[0];
+      if (/^\d{5,20}$/.test(tg)) return tg;
+    }
+    return null;
+  } catch (_) {
+    return null;
+  }
 }
 
 async function ensureUserByTelegramId(telegramId) {
