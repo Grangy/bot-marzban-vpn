@@ -21,6 +21,7 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 const DRY_RUN = String(process.env.DRY_RUN || "") === "1";
+const CLEANUP_FREE_ORPHANS = String(process.env.CLEANUP_FREE_ORPHANS || "") === "1";
 const REMNAWAVE_API_URL = String(process.env.REMNAWAVE_API_URL || "").replace(/\/$/, "");
 const REMNAWAVE_API_KEY = String(process.env.REMNAWAVE_API_KEY || process.env.API_ACCESS_KEY || "");
 const CAN_USE_REMNAWAVE = Boolean(REMNAWAVE_API_URL && REMNAWAVE_API_KEY);
@@ -185,8 +186,41 @@ async function moveAllRelations(fromUserId, toUserId) {
   return moved;
 }
 
+async function cleanupFreeOrphanOnly(orphanUserId) {
+  const subs = await prisma.subscription.findMany({
+    where: { userId: orphanUserId },
+    select: { id: true, type: true, subscriptionUrl: true, subscriptionUrl2: true, remnawaveUuid: true, startDate: true, endDate: true },
+    take: 200,
+  });
+  const onlyFreeNoUrl = subs.length > 0 && subs.every((s) => s.type === "FREE" && !s.subscriptionUrl && !s.subscriptionUrl2 && !s.remnawaveUuid);
+  if (!onlyFreeNoUrl) return { cleaned: false, reason: "NOT_ONLY_FREE_NO_URL" };
+
+  const [topups, refOwner, refAct, promoOwner, promoAct] = await Promise.all([
+    prisma.topUp.count({ where: { userId: orphanUserId } }),
+    prisma.referralBonus.count({ where: { codeOwnerId: orphanUserId } }),
+    prisma.referralBonus.count({ where: { activatorId: orphanUserId } }),
+    prisma.promoActivation?.count ? prisma.promoActivation.count({ where: { codeOwnerId: orphanUserId } }) : 0,
+    prisma.promoActivation?.count ? prisma.promoActivation.count({ where: { activatorId: orphanUserId } }) : 0,
+  ]);
+
+  const hasOtherData = topups > 0 || refOwner > 0 || refAct > 0 || promoOwner > 0 || promoAct > 0;
+  if (hasOtherData) return { cleaned: false, reason: "HAS_OTHER_RELATED_DATA" };
+
+  if (DRY_RUN) return { cleaned: true, deletedSubscriptions: subs.length, backupPath: null };
+
+  const fs = require("fs");
+  const path = require("path");
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const outPath = path.join("/tmp", `orphan_free_user_${orphanUserId}_${ts}.json`);
+  fs.writeFileSync(outPath, JSON.stringify({ orphanUserId, subscriptions: subs }, null, 2));
+
+  const del = await prisma.subscription.deleteMany({ where: { userId: orphanUserId } });
+  return { cleaned: true, deletedSubscriptions: del.count, backupPath: outPath };
+}
+
 async function main() {
   console.log(`[orphan-fix] dryRun=${DRY_RUN}`);
+  console.log(`[orphan-fix] cleanupFreeOrphans=${CLEANUP_FREE_ORPHANS}`);
   const orphanIds = await getOrphanUserIds();
   console.log(`[orphan-fix] orphan userIds: ${orphanIds.length}`);
 
@@ -194,6 +228,7 @@ async function main() {
     processed: 0,
     fixed: 0,
     skipped: 0,
+    cleanedFreeOrphans: 0,
     details: [],
   };
 
@@ -201,6 +236,14 @@ async function main() {
     report.processed++;
     const tg = await inferTelegramIdForOrphanUserId(orphanUserId);
     if (!tg) {
+      if (CLEANUP_FREE_ORPHANS) {
+        const cleaned = await cleanupFreeOrphanOnly(orphanUserId);
+        if (cleaned.cleaned) {
+          report.cleanedFreeOrphans++;
+          report.details.push({ orphanUserId, status: "CLEANED_FREE_ORPHAN", ...cleaned });
+          continue;
+        }
+      }
       report.skipped++;
       report.details.push({ orphanUserId, status: "SKIPPED_NO_TELEGRAMID" });
       continue;
