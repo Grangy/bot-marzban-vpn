@@ -21,15 +21,27 @@ function startExtendReminder12h(bot) {
           startDate: { lte: threshold },
           remindExtend12hSentAt: null,
         },
-        include: { user: { select: { chatId: true } } },
+        // Don't include required relation: orphaned userId rows exist in prod DB.
+        // We'll batch-load users separately and gracefully handle missing users.
+        select: { id: true, userId: true },
         orderBy: { startDate: "asc" },
         take: 200,
       });
 
       if (subs.length === 0) return;
 
+      const userIds = [...new Set(subs.map((s) => s.userId))];
+      const users =
+        userIds.length === 0
+          ? []
+          : await prisma.user.findMany({
+              where: { id: { in: userIds } },
+              select: { id: true, chatId: true },
+            });
+      const byId = new Map(users.map((u) => [u.id, u]));
+
       for (const s of subs) {
-        const chatId = s.user?.chatId;
+        const chatId = byId.get(s.userId)?.chatId;
         if (!chatId) {
           await prisma.subscription.update({
             where: { id: s.id },
