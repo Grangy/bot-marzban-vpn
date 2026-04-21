@@ -24,6 +24,10 @@ const DRY_RUN = String(process.env.DRY_RUN || "") === "1";
 const REMNAWAVE_API_URL = String(process.env.REMNAWAVE_API_URL || "").replace(/\/$/, "");
 const REMNAWAVE_API_KEY = String(process.env.REMNAWAVE_API_KEY || process.env.API_ACCESS_KEY || "");
 const CAN_USE_REMNAWAVE = Boolean(REMNAWAVE_API_URL && REMNAWAVE_API_KEY);
+const fetchFn =
+  typeof globalThis.fetch === "function"
+    ? globalThis.fetch.bind(globalThis)
+    : (...args) => import("node-fetch").then(({ default: f }) => f(...args));
 
 function uniq(arr) {
   return [...new Set(arr)];
@@ -114,7 +118,7 @@ async function tryResolveTelegramIdFromRemnawave(remnawaveUuid) {
   const id = String(remnawaveUuid || "").trim();
   if (!id) return null;
   try {
-    const r = await fetch(`${REMNAWAVE_API_URL}/v1/users/${encodeURIComponent(id)}`, {
+    const r = await fetchFn(`${REMNAWAVE_API_URL}/v1/users/${encodeURIComponent(id)}`, {
       headers: { "x-api-key": REMNAWAVE_API_KEY },
     });
     const text = await r.text();
