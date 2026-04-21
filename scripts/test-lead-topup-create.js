@@ -22,8 +22,9 @@ async function main() {
 
   await prisma.topUp.deleteMany({ where: { userId: r1.user.id } });
   await prisma.leadIdentity.delete({ where: { userId: r1.user.id } });
-  await prisma.user.delete({ where: { id: r1.user.id } });
-  console.log("OK cleanup");
+  // Не удаляем User: в SQLite foreign_keys могут быть выключены/не применены в тестовой среде,
+  // что приводит к "осиротевшим" ссылкам в связанных таблицах.
+  console.log("OK cleanup (kept user row to avoid orphan relations)");
 }
 
 main()
