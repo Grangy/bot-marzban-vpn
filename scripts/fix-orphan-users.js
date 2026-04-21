@@ -44,7 +44,12 @@ function tryDecodeTelegramIdFromToken(token) {
   // Token itself is URL-safe base64-ish but in practice works with standard base64 decode
   // for our legacy Marzban links where it begins with base64("<tgId>_<...>").
   try {
-    const buf = Buffer.from(token, "base64");
+    let t = String(token);
+    // support base64url and missing padding
+    t = t.replace(/-/g, "+").replace(/_/g, "/");
+    const pad = t.length % 4;
+    if (pad) t += "=".repeat(4 - pad);
+    const buf = Buffer.from(t, "base64");
     const s = buf.toString("utf8");
     const tg = s.split("_", 1)[0];
     if (/^\d{5,20}$/.test(tg)) return tg;
