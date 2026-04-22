@@ -94,26 +94,28 @@ async function broadcastToActiveUsers(message, options = {}) {
 
   const now = new Date();
 
+  // IMPORTANT: do not include required `user` relation — prod DB can contain orphaned userId rows.
   const activeSubscriptions = await prisma.subscription.findMany({
     where: {
       endDate: { gt: now },
       type: { not: "FREE" }
     },
-    include: {
-      user: {
-        select: {
-          id: true,
-          chatId: true,
-          telegramId: true,
-          accountName: true
-        }
-      }
-    }
+    select: { id: true, userId: true }
   });
+
+  const userIds = [...new Set(activeSubscriptions.map((s) => s.userId))];
+  const users =
+    userIds.length === 0
+      ? []
+      : await prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, chatId: true, telegramId: true, accountName: true },
+        });
+  const userById = new Map(users.map((u) => [u.id, u]));
 
   const uniqueUsers = new Map();
   for (const sub of activeSubscriptions) {
-    const user = sub.user;
+    const user = userById.get(sub.userId);
     if (user.chatId && user.chatId === String(user.telegramId)) {
       uniqueUsers.set(user.id, user);
     }
