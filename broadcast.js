@@ -116,6 +116,7 @@ async function broadcastToActiveUsers(message, options = {}) {
   const uniqueUsers = new Map();
   for (const sub of activeSubscriptions) {
     const user = userById.get(sub.userId);
+    if (!user) continue;
     if (user.chatId && user.chatId === String(user.telegramId)) {
       uniqueUsers.set(user.id, user);
     }
