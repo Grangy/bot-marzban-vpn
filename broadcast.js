@@ -104,14 +104,14 @@ async function broadcastToActiveUsers(message, options = {}) {
   });
 
   const userIds = [...new Set(activeSubscriptions.map((s) => s.userId))];
-  const users =
+  const userRows =
     userIds.length === 0
       ? []
       : await prisma.user.findMany({
           where: { id: { in: userIds } },
           select: { id: true, chatId: true, telegramId: true, accountName: true },
         });
-  const userById = new Map(users.map((u) => [u.id, u]));
+  const userById = new Map(userRows.map((u) => [u.id, u]));
 
   const uniqueUsers = new Map();
   for (const sub of activeSubscriptions) {
