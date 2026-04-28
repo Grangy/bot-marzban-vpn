@@ -18,6 +18,21 @@ const REMNAWAVE_API_KEY = process.env.REMNAWAVE_API_KEY || process.env.API_ACCES
 const REMNAWAVE_SUBSCRIPTION_TYPE = process.env.REMNAWAVE_SUBSCRIPTION_TYPE || "russia";
 const REMNAWAVE_DEVICE_LIMIT_RAW = process.env.REMNAWAVE_DEVICE_LIMIT;
 
+function withTimeout(ms) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(new Error(`timeout ${ms}ms`)), ms);
+  return { signal: controller.signal, clear: () => clearTimeout(t) };
+}
+
+async function fetchRemnawave(url, options = {}, timeoutMs = 12_000) {
+  const { signal, clear } = withTimeout(timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal });
+  } finally {
+    clear();
+  }
+}
+
 function useRemnawavePrimary() {
   return Boolean(REMNAWAVE_API_URL && REMNAWAVE_API_KEY);
 }
@@ -253,9 +268,9 @@ async function remnawaveGetUser(idOrUsername) {
   const url = `${REMNAWAVE_API_URL}/v1/users/${encodeURIComponent(id)}`;
 
   let lastText = "";
-  const maxAttempts = 12;
+  const maxAttempts = 4;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const r = await fetch(url, { headers: { "x-api-key": REMNAWAVE_API_KEY } });
+    const r = await fetchRemnawave(url, { headers: { "x-api-key": REMNAWAVE_API_KEY } }, 10_000);
     lastText = await r.text();
     let json;
     try {
@@ -280,7 +295,7 @@ async function remnawaveGetUser(idOrUsername) {
 
     const maybeSyncDelay = r.status === 404 && lastText.includes("Not found") && attempt < maxAttempts;
     if (maybeSyncDelay) {
-      await new Promise((res) => setTimeout(res, 2000));
+      await new Promise((res) => setTimeout(res, 1200));
       continue;
     }
     return null;
@@ -303,15 +318,15 @@ async function remnawaveAddTrafficGb(idOrUsername, gb) {
   const body = JSON.stringify({ gb: n });
 
   let lastText = "";
-  const maxAttempts = 12;
+  const maxAttempts = 4;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const res = await fetch(url, { method: "PATCH", headers: remnawaveHeaders(), body });
+    const res = await fetchRemnawave(url, { method: "PATCH", headers: remnawaveHeaders(), body }, 10_000);
     lastText = await res.text();
     if (res.ok) return true;
 
     const maybeSyncDelay = res.status === 404 && lastText.includes("Not found") && attempt < maxAttempts;
     if (maybeSyncDelay) {
-      await new Promise((r) => setTimeout(r, 2000));
+      await new Promise((r) => setTimeout(r, 1200));
       continue;
     }
     throw new Error(`REMNAWAVE_ADD_TRAFFIC_FAILED ${res.status}: ${lastText.slice(0, 300)}`);
@@ -341,11 +356,11 @@ async function remnawaveCreateUser({ username, days, gb = 0, subscriptionType })
   const dl = remnawaveDeviceLimit();
   if (dl !== undefined) payload.deviceLimit = dl;
 
-  const res = await fetch(`${REMNAWAVE_API_URL}/v1/users`, {
+  const res = await fetchRemnawave(`${REMNAWAVE_API_URL}/v1/users`, {
     method: "POST",
     headers: remnawaveHeaders(),
     body: JSON.stringify(payload),
-  });
+  }, 12_000);
   const text = await res.text();
   let json = {};
   try {
@@ -516,15 +531,15 @@ async function setRemnawaveTelegram(remnawaveUuid, telegramId, username) {
   });
 
   let lastText = "";
-  const maxAttempts = 12;
+  const maxAttempts = 4;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const res = await fetch(url, { method: "PATCH", headers: remnawaveHeaders(), body });
+    const res = await fetchRemnawave(url, { method: "PATCH", headers: remnawaveHeaders(), body }, 10_000);
     lastText = await res.text();
     if (res.ok) return lastText;
 
     const maybeSyncDelay = res.status === 404 && lastText.includes("Not found") && attempt < maxAttempts;
     if (maybeSyncDelay) {
-      await new Promise((r) => setTimeout(r, 2000));
+      await new Promise((r) => setTimeout(r, 1200));
       continue;
     }
     throw new Error(`REMNAWAVE_TELEGRAM_FAILED ${res.status}: ${lastText.slice(0, 300)}`);
@@ -548,15 +563,15 @@ async function addRemnawaveTrafficGb(remnawaveUuid, gb) {
   const body = JSON.stringify({ gb: n });
 
   let lastText = "";
-  const maxAttempts = 12;
+  const maxAttempts = 4;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const res = await fetch(url, { method: "PATCH", headers: remnawaveHeaders(), body });
+    const res = await fetchRemnawave(url, { method: "PATCH", headers: remnawaveHeaders(), body }, 10_000);
     lastText = await res.text();
     if (res.ok) return lastText;
 
     const maybeSyncDelay = res.status === 404 && lastText.includes("Not found") && attempt < maxAttempts;
     if (maybeSyncDelay) {
-      await new Promise((r) => setTimeout(r, 2000));
+      await new Promise((r) => setTimeout(r, 1200));
       continue;
     }
     throw new Error(`REMNAWAVE_TRAFFIC_FAILED ${res.status}: ${lastText.slice(0, 300)}`);
